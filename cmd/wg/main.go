@@ -55,7 +55,8 @@ var renders = []string{"topo", "mesh", "terrain", "rivers", "moisture", "biomes"
 var generators = []string{"fracture", "fractal"}
 
 // config holds the parsed flags. The map size and seed are kept in fracture
-// and copied to the other generators.
+// and copied to the other generators. Fractal maps are square, so without
+// -width and -height they take fractal's default size.
 type config struct {
 	generator string
 	fracture  fracture.Options
@@ -95,8 +96,8 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 	}
 
 	fs.Uint64Var(&c.fracture.Seed, "seed", c.fracture.Seed, "seed for every random stage")
-	fs.IntVar(&c.fracture.Width, "width", c.fracture.Width, "map width in pixels")
-	fs.IntVar(&c.fracture.Height, "height", c.fracture.Height, "map height in pixels")
+	fs.IntVar(&c.fracture.Width, "width", c.fracture.Width, fmt.Sprintf("map width in pixels; with fractal, the default is %d, and width and height must be equal and 2ⁿ+1", c.fractal.Width))
+	fs.IntVar(&c.fracture.Height, "height", c.fracture.Height, fmt.Sprintf("map height in pixels; with fractal, the default is %d", c.fractal.Height))
 	fs.StringVar(&c.generator, "generator", "fracture", "height map generator: "+strings.Join(generators, " or "))
 	fs.IntVar(&c.fracture.Rounds, "rounds", c.fracture.Rounds, "fracture rounds; more rounds give rougher terrain")
 	fs.Float64Var(&c.fractal.Roughness, "roughness", c.fractal.Roughness, "fractal roughness, 0 or more; larger values give smoother land")
@@ -146,7 +147,19 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 		}
 	}
 
-	if c.landCells != 0 {
+	set := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	if c.generator == "fractal" {
+		if set["land-cells"] {
+			return nil, errors.New("-land-cells can't be used with -generator fractal, whose maps come only in sizes of 2ⁿ+1; set -width and -height instead")
+		}
+		if !set["width"] {
+			c.fracture.Width = c.fractal.Width
+		}
+		if !set["height"] {
+			c.fracture.Height = c.fractal.Height
+		}
+	} else if c.landCells != 0 {
 		if err := c.sizeForLandCells(); err != nil {
 			return nil, err
 		}

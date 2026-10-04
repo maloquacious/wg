@@ -21,8 +21,8 @@ var renderDir = flag.String("render", "", "write rendered maps to this directory
 
 func TestDefaultOptions(t *testing.T) {
 	opts := fractal.DefaultOptions()
-	if opts.Width != 1920 || opts.Height != 1080 {
-		t.Errorf("size: want 1920x1080, got %dx%d", opts.Width, opts.Height)
+	if opts.Width != 1025 || opts.Height != 1025 {
+		t.Errorf("size: want 1025x1025, got %dx%d", opts.Width, opts.Height)
 	}
 	if opts.Seed != 0x0123456789abcdef {
 		t.Errorf("seed: want 0x0123456789abcdef, got %#x", opts.Seed)
@@ -71,12 +71,12 @@ func TestGenerate(t *testing.T) {
 }
 
 // TestMatchesReference checks the generator against a direct port of the
-// original's fill, cropped and normalized the same way.
+// original's fill, normalized the same way.
 func TestMatchesReference(t *testing.T) {
 	for _, opts := range []fractal.Options{
-		{Width: 97, Height: 61, Roughness: 0.8, Seed: 0x0123456789abcdef},
+		{Width: 129, Height: 129, Roughness: 0.8, Seed: 0x0123456789abcdef},
 		{Width: 33, Height: 33, Roughness: 0.001, Seed: 7},
-		{Width: 2, Height: 2, Roughness: 1, Seed: 1},
+		{Width: 3, Height: 3, Roughness: 1, Seed: 1},
 	} {
 		hm, err := fractal.Generate(opts)
 		if err != nil {
@@ -95,11 +95,8 @@ func TestMatchesReference(t *testing.T) {
 func reference(opts fractal.Options) []float64 {
 	rnd := rand.New(rand.NewPCG(opts.Seed, opts.Seed))
 	randnum := func(lo, hi float64) float64 { return rnd.Float64()*(hi-lo) + lo }
-	subSize := 1
-	for subSize+1 < max(opts.Width, opts.Height) {
-		subSize *= 2
-	}
-	size := subSize + 1
+	size := opts.Width
+	subSize := size - 1
 	fa := make([]float64, size*size)
 	avgDiamond := func(i, j, stride int) float64 {
 		switch {
@@ -142,10 +139,7 @@ func reference(opts fractal.Options) []float64 {
 		scale *= ratio
 	}
 
-	out := make([]float64, 0, opts.Width*opts.Height)
-	for y := range opts.Height {
-		out = append(out, fa[y*size:y*size+opts.Width]...)
-	}
+	out := fa
 	lo, hi := slices.Min(out), slices.Max(out)
 	for n := range out {
 		out[n] = (out[n] - lo) / (hi - lo)
@@ -155,11 +149,16 @@ func reference(opts fractal.Options) []float64 {
 
 func TestGenerateRejectsBadOptions(t *testing.T) {
 	for _, opts := range []fractal.Options{
-		{Width: 0, Height: 1080, Roughness: 1},
-		{Width: 1920, Height: 1, Roughness: 1},
-		{Width: 1920, Height: 1080, Roughness: -1},
-		{Width: 1920, Height: 1080, Roughness: math.NaN()},
-		{Width: 1920, Height: 1080, Roughness: math.Inf(1)},
+		{Width: 1920, Height: 1080, Roughness: 1},
+		{Width: 1024, Height: 1024, Roughness: 1},
+		{Width: 1025, Height: 513, Roughness: 1},
+		{Width: 2, Height: 2, Roughness: 1},
+		{Width: 1, Height: 1, Roughness: 1},
+		{Width: 0, Height: 0, Roughness: 1},
+		{Width: -3, Height: -3, Roughness: 1},
+		{Width: 1025, Height: 1025, Roughness: -1},
+		{Width: 1025, Height: 1025, Roughness: math.NaN()},
+		{Width: 1025, Height: 1025, Roughness: math.Inf(1)},
 	} {
 		if _, err := fractal.Generate(opts); err == nil {
 			t.Errorf("%+v: want error, got nil", opts)

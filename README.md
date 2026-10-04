@@ -77,11 +77,12 @@ wg -width 2000 -height 2000 -rounds 10000 -ocean 52 -stats
 ```
 
 Smoother land from the fractal generator, with jagged coasts and islands at a
-lower roughness:
+lower roughness. Fractal maps are square, 2ⁿ+1 pixels on a side, and 1025
+when no size is given:
 
 ```sh
 wg -generator fractal
-wg -generator fractal -roughness 0.5
+wg -generator fractal -width 2049 -height 2049 -roughness 0.5
 ```
 
 An arid world, where the land between the rivers is desert:
@@ -157,8 +158,8 @@ wg -width 960 -height 540 -ocean 52 -icons -render biomes -out docs -name icons
 | Flag | Default | What it does |
 |------|---------|--------------|
 | `-seed` | `0x0123456789abcdef` | Seed for the random stages. Decimal or `0x` hex. |
-| `-width`, `-height` | `1920`, `1080` | Map size in pixels. With `-land-cells`, only their ratio is used. |
-| `-land-cells` | off | Target number of land cells. Sets the map size. |
+| `-width`, `-height` | `1920`, `1080` | Map size in pixels. With `-land-cells`, only their ratio is used. With `-generator fractal` they default to `1025`, and must be equal and one more than a power of 2: `257`, `513`, `1025`, `2049` and so on. |
+| `-land-cells` | off | Target number of land cells. Sets the map size. Not available with `-generator fractal`. |
 | `-generator` | `fracture` | How the height map is made: `fracture` or `fractal`. |
 | `-rounds` | `1000` | Rounds of terrain building for `fracture`. More rounds give rougher terrain. |
 | `-roughness` | `0.8` | Smoothness of the land for `fractal`. Lower values break the coast into islands; higher values give smooth, rounded land. |

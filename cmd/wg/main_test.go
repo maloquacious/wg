@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/maloquacious/wg"
+	"github.com/maloquacious/wg/fractal"
 )
 
 // small makes the maps in these tests quick to generate.
@@ -45,14 +46,23 @@ func TestRunWritesRenders(t *testing.T) {
 
 func TestFractalGenerator(t *testing.T) {
 	var stdout bytes.Buffer
-	args := append(slices.Clone(small), "-generator", "fractal", "-roughness", "0.6", "-render", "none")
+	args := []string{"-generator", "fractal", "-width", "257", "-height", "257", "-roughness", "0.6", "-render", "none"}
 	if err := run(args, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"320x180 pixels", "fractal roughness 0.6"} {
+	for _, want := range []string{"257x257 pixels", "fractal roughness 0.6"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("summary is missing %q:\n%s", want, stdout.String())
 		}
+	}
+
+	// without -width and -height, fractal maps take fractal's default size
+	c, err := parse([]string{"-generator", "fractal"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := fractal.DefaultOptions(); c.fractal.Width != want.Width || c.fractal.Height != want.Height {
+		t.Errorf("size: want %dx%d, got %dx%d", want.Width, want.Height, c.fractal.Width, c.fractal.Height)
 	}
 }
 
@@ -117,6 +127,9 @@ func TestBadArguments(t *testing.T) {
 		{"-skew", "0", "-render", "none"},
 		{"-generator", "perlin", "-render", "none"},
 		{"-generator", "fractal", "-roughness", "-1", "-render", "none"},
+		{"-generator", "fractal", "-render", "none"}, // small's 320x180
+		{"-generator", "fractal", "-width", "1024", "-height", "1024", "-render", "none"},
+		{"-generator", "fractal", "-land-cells", "1000", "-render", "none"},
 		{"stray"},
 		{"-no-such-flag"},
 	} {

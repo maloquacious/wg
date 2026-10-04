@@ -6,9 +6,10 @@
 //
 // The algorithm is adapted from the "fractal" generator in
 // https://github.com/mdhender/mapgen, which follows Paul Martz's "Generating
-// Random Fractal Terrain". It fills a square grid of 2ⁿ+1 points whose edges
-// wrap, so the grid would tile seamlessly. The map is cropped from its top
-// left corner, so the map itself does not tile.
+// Random Fractal Terrain". The map is a square of 2ⁿ+1 pixels on a side, the
+// grid the algorithm fills, and any other size is refused. Its edges wrap, so
+// the last row and column repeat the first and the map tiles seamlessly once
+// they are dropped.
 package fractal
 
 import (
@@ -21,7 +22,9 @@ import (
 
 // Options configures the generator.
 type Options struct {
-	Width, Height int // size of the map in pixels
+	// Width and Height are the size of the map in pixels. They must be equal
+	// and one more than a power of 2: 3, 5, 9, ..., 1025, 2049, ...
+	Width, Height int
 	// Roughness is Martz's H. The random offsets shrink by a factor of 2^-H
 	// each time the grid spacing halves, so 0 keeps fine detail as strong as
 	// the continents (close to noise) and larger values give smoother land.
@@ -32,8 +35,8 @@ type Options struct {
 // DefaultOptions returns the options used by the tests.
 func DefaultOptions() Options {
 	return Options{
-		Width:     1920,
-		Height:    1080,
+		Width:     1025,
+		Height:    1025,
 		Roughness: 0.8,
 		Seed:      0x0123456789abcdef,
 	}
@@ -42,30 +45,27 @@ func DefaultOptions() Options {
 // Generate returns a height map normalized to the range 0...1.
 // The same options always produce the same map.
 func Generate(opts Options) (*heightmap.Map, error) {
-	if opts.Width < 2 || opts.Height < 2 {
-		return nil, fmt.Errorf("fractal: invalid size %dx%d", opts.Width, opts.Height)
+	if opts.Width != opts.Height || !validSide(opts.Width) {
+		return nil, fmt.Errorf("fractal: invalid size %dx%d: want a square 2ⁿ+1 pixels on a side, such as 513x513 or 1025x1025", opts.Width, opts.Height)
 	}
 	if !(opts.Roughness >= 0) || math.IsInf(opts.Roughness, 0) {
 		return nil, fmt.Errorf("fractal: invalid roughness %g", opts.Roughness)
 	}
 	rnd := rand.New(rand.NewPCG(opts.Seed, opts.Seed))
 
-	// side is the number of segments along the grid's edge, a power of 2.
-	side := 1
-	for side+1 < max(opts.Width, opts.Height) {
-		side *= 2
-	}
-	grid := diamondSquare(side, math.Pow(2, -opts.Roughness), rnd)
-
-	hm, err := heightmap.New(opts.Width, opts.Height)
-	if err != nil {
-		return nil, err
-	}
-	for y := range opts.Height {
-		copy(hm.Data[y*opts.Width:(y+1)*opts.Width], grid[y*(side+1):])
+	hm := &heightmap.Map{
+		Width:  opts.Width,
+		Height: opts.Height,
+		Data:   diamondSquare(opts.Width-1, math.Pow(2, -opts.Roughness), rnd),
 	}
 	normalize(hm.Data)
 	return hm, nil
+}
+
+// validSide reports whether n is 2ᵏ+1 for some k ≥ 1.
+func validSide(n int) bool {
+	side := n - 1
+	return side >= 2 && side&(side-1) == 0
 }
 
 // diamondSquare returns a (side+1)² grid in row-major order. side must be a
