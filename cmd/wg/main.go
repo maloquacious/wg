@@ -34,6 +34,7 @@ import (
 	"github.com/maloquacious/wg/moisture"
 	"github.com/maloquacious/wg/render"
 	"github.com/maloquacious/wg/rivers"
+	"github.com/maloquacious/wg/stitch"
 	"github.com/maloquacious/wg/terrain"
 	"github.com/maloquacious/wg/voronoi"
 )
@@ -52,15 +53,18 @@ func main() {
 var renders = []string{"topo", "mesh", "terrain", "rivers", "moisture", "biomes"}
 
 // generators lists the height map generators.
-var generators = []string{"fracture", "fractal"}
+var generators = []string{"fracture", "fractal", "stitch"}
 
 // config holds the parsed flags. The map size and seed are kept in fracture
 // and copied to the other generators. Fractal maps are square, so without
-// -width and -height they take fractal's default size.
+// -width and -height they take fractal's default size. Stitch maps take their
+// size from the block layout. The roughness is kept in fractal and copied to
+// stitch.
 type config struct {
 	generator string
 	fracture  fracture.Options
 	fractal   fractal.Options
+	stitch    stitch.Options
 	voronoi   voronoi.Options
 	terrain   terrain.Options
 	rivers    rivers.Options
@@ -82,6 +86,7 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 	c := &config{
 		fracture: fracture.DefaultOptions(),
 		fractal:  fractal.DefaultOptions(),
+		stitch:   stitch.DefaultOptions(),
 		voronoi:  voronoi.DefaultOptions(),
 		terrain:  terrain.DefaultOptions(),
 		rivers:   rivers.DefaultOptions(),
@@ -98,9 +103,12 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 	fs.Uint64Var(&c.fracture.Seed, "seed", c.fracture.Seed, "seed for every random stage")
 	fs.IntVar(&c.fracture.Width, "width", c.fracture.Width, fmt.Sprintf("map width in pixels; with fractal, the default is %d, and width and height must be equal and 2ⁿ+1", c.fractal.Width))
 	fs.IntVar(&c.fracture.Height, "height", c.fracture.Height, fmt.Sprintf("map height in pixels; with fractal, the default is %d", c.fractal.Height))
-	fs.StringVar(&c.generator, "generator", "fracture", "height map generator: "+strings.Join(generators, " or "))
+	fs.StringVar(&c.generator, "generator", "fracture", "height map generator: "+strings.Join(generators, ", "))
 	fs.IntVar(&c.fracture.Rounds, "rounds", c.fracture.Rounds, "fracture rounds; more rounds give rougher terrain")
-	fs.Float64Var(&c.fractal.Roughness, "roughness", c.fractal.Roughness, "fractal roughness, 0 or more; larger values give smoother land")
+	fs.Float64Var(&c.fractal.Roughness, "roughness", c.fractal.Roughness, "fractal and stitch roughness, 0 or more; larger values give smoother land")
+	fs.IntVar(&c.stitch.BlocksWide, "blocks-wide", c.stitch.BlocksWide, "stitch: number of blocks across the map")
+	fs.IntVar(&c.stitch.BlocksHigh, "blocks-high", c.stitch.BlocksHigh, "stitch: number of blocks down the map")
+	fs.IntVar(&c.stitch.BlockSize, "block-size", c.stitch.BlockSize, "stitch: length of a block's side in pixels, 2ⁿ+1; neighboring blocks share their edge pixels")
 	fs.IntVar(&c.landCells, "land-cells", 0, "target number of land cells; when set, the map size is worked out from it, keeping the width:height ratio")
 	fs.Float64Var(&c.voronoi.CellSize, "cell-size", c.voronoi.CellSize, "mean cell width in pixels")
 	fs.IntVar(&c.voronoi.OceanPercent, "ocean", c.voronoi.OceanPercent, "percentage of cells, 0-100, that are ocean")
@@ -128,7 +136,7 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 	}
 
 	if !slices.Contains(generators, c.generator) {
-		return nil, fmt.Errorf("unknown generator %q: want %s", c.generator, strings.Join(generators, " or "))
+		return nil, fmt.Errorf("unknown generator %q: want %s", c.generator, strings.Join(generators, ", "))
 	}
 
 	switch *renderList {
@@ -149,7 +157,15 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 
 	set := make(map[string]bool)
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
-	if c.generator == "fractal" {
+	switch c.generator {
+	case "stitch":
+		for _, name := range []string{"width", "height", "land-cells"} {
+			if set[name] {
+				return nil, fmt.Errorf("-%s can't be used with -generator stitch, whose map size comes from -blocks-wide, -blocks-high and -block-size", name)
+			}
+		}
+		c.fracture.Width, c.fracture.Height = c.stitch.Size()
+	case "fractal":
 		if set["land-cells"] {
 			return nil, errors.New("-land-cells can't be used with -generator fractal, whose maps come only in sizes of 2ⁿ+1; set -width and -height instead")
 		}
@@ -159,20 +175,28 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 		if !set["height"] {
 			c.fracture.Height = c.fractal.Height
 		}
-	} else if c.landCells != 0 {
-		if err := c.sizeForLandCells(); err != nil {
-			return nil, err
+	default:
+		if c.landCells != 0 {
+			if err := c.sizeForLandCells(); err != nil {
+				return nil, err
+			}
 		}
 	}
 	c.fractal.Width, c.fractal.Height, c.fractal.Seed = c.fracture.Width, c.fracture.Height, c.fracture.Seed
+	c.stitch.Roughness, c.stitch.Seed = c.fractal.Roughness, c.fracture.Seed
 	return c, nil
 }
 
 // heightMap runs the chosen generator and describes it for the summary.
 func (c *config) heightMap() (*heightmap.Map, string, error) {
-	if c.generator == "fractal" {
+	switch c.generator {
+	case "fractal":
 		hm, err := fractal.Generate(c.fractal)
 		return hm, fmt.Sprintf("fractal roughness %g", c.fractal.Roughness), err
+	case "stitch":
+		hm, err := stitch.Generate(c.stitch)
+		return hm, fmt.Sprintf("stitch %dx%d blocks of %d, roughness %g",
+			c.stitch.BlocksWide, c.stitch.BlocksHigh, c.stitch.BlockSize, c.stitch.Roughness), err
 	}
 	hm, err := fracture.Generate(c.fracture)
 	return hm, fmt.Sprintf("%d fracture rounds", c.fracture.Rounds), err

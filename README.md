@@ -85,6 +85,14 @@ wg -generator fractal
 wg -generator fractal -width 2049 -height 2049 -roughness 0.5
 ```
 
+The same terrain on a map that need not be square, stitched from blocks. This
+one is 4 by 2 blocks of 513 pixels, 2049×1025 in all. More, smaller blocks
+give more, smaller landmasses:
+
+```sh
+wg -generator stitch -blocks-wide 4 -blocks-high 2 -block-size 513 -ocean 52
+```
+
 An arid world, where the land between the rivers is desert:
 
 ```sh
@@ -158,11 +166,13 @@ wg -width 960 -height 540 -ocean 52 -icons -render biomes -out docs -name icons
 | Flag | Default | What it does |
 |------|---------|--------------|
 | `-seed` | `0x0123456789abcdef` | Seed for the random stages. Decimal or `0x` hex. |
-| `-width`, `-height` | `1920`, `1080` | Map size in pixels. With `-land-cells`, only their ratio is used. With `-generator fractal` they default to `1025`, and must be equal and one more than a power of 2: `257`, `513`, `1025`, `2049` and so on. |
-| `-land-cells` | off | Target number of land cells. Sets the map size. Not available with `-generator fractal`. |
-| `-generator` | `fracture` | How the height map is made: `fracture` or `fractal`. |
+| `-width`, `-height` | `1920`, `1080` | Map size in pixels. With `-land-cells`, only their ratio is used. Not available with `-generator stitch`, which sizes the map from its blocks. With `-generator fractal` they default to `1025`, and must be equal and one more than a power of 2: `257`, `513`, `1025`, `2049` and so on. |
+| `-blocks-wide`, `-blocks-high` | `2`, `1` | For `stitch`, the number of blocks across and down the map. |
+| `-block-size` | `1025` | For `stitch`, the length of a block's side in pixels, one more than a power of 2. Neighboring blocks share their edge pixels, so 2 blocks of 1025 make a map 2049 wide. |
+| `-land-cells` | off | Target number of land cells. Sets the map size. Not available with `-generator fractal` or `stitch`. |
+| `-generator` | `fracture` | How the height map is made: `fracture`, `fractal` or `stitch`. |
 | `-rounds` | `1000` | Rounds of terrain building for `fracture`. More rounds give rougher terrain. |
-| `-roughness` | `0.8` | Smoothness of the land for `fractal`. Lower values break the coast into islands; higher values give smooth, rounded land. |
+| `-roughness` | `0.8` | Smoothness of the land for `fractal` and `stitch`. Lower values break the coast into islands; higher values give smooth, rounded land. |
 | `-cell-size` | `14` | Mean width of a cell in pixels. |
 | `-ocean` | `70` | Percentage of cells that are ocean. |
 | `-lake-depth` | `0.01` | How deep a hollow must be to fill with a lake. |
@@ -190,7 +200,8 @@ Each stage is a Go package, run in this order:
 1. **`fracture`** builds the height map. Each round raises or lowers a random
    circle of the map. **`fractal`** (`-generator fractal`) builds it instead
    with the diamond-square algorithm, which gives smooth slopes rather than
-   steps.
+   steps. **`stitch`** (`-generator stitch`) runs the same algorithm over a
+   grid of blocks, so the map can be any multiple of the block size.
 2. **`voronoi`** covers the map with cells and gives each the mean height of
    the pixels in it. The lowest cells become ocean.
 3. **`terrain`** fills hollows so that all water drains to the sea or off the

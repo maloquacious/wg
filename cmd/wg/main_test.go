@@ -66,6 +66,31 @@ func TestFractalGenerator(t *testing.T) {
 	}
 }
 
+func TestStitchGenerator(t *testing.T) {
+	var stdout bytes.Buffer
+	args := []string{"-generator", "stitch", "-blocks-wide", "3", "-blocks-high", "2", "-block-size", "129", "-roughness", "0.6", "-render", "none"}
+	if err := run(args, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"385x257 pixels", "stitch 3x2 blocks of 129, roughness 0.6"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("summary is missing %q:\n%s", want, stdout.String())
+		}
+	}
+
+	for _, args := range [][]string{
+		{"-height", "257"},
+		{"-land-cells", "1000"},
+		{"-block-size", "128"},
+		{"-blocks-wide", "0"},
+	} {
+		args = append([]string{"-generator", "stitch", "-block-size", "65", "-render", "none"}, args...)
+		if err := run(args, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+			t.Errorf("%v: want error, got nil", args)
+		}
+	}
+}
+
 func TestRunWithoutRenders(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "never")
 	var stdout, stderr bytes.Buffer
@@ -130,6 +155,7 @@ func TestBadArguments(t *testing.T) {
 		{"-generator", "fractal", "-render", "none"}, // small's 320x180
 		{"-generator", "fractal", "-width", "1024", "-height", "1024", "-render", "none"},
 		{"-generator", "fractal", "-land-cells", "1000", "-render", "none"},
+		{"-generator", "stitch", "-render", "none"}, // small sets -width
 		{"stray"},
 		{"-no-such-flag"},
 	} {
