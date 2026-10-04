@@ -27,55 +27,9 @@ func DefaultMeshOptions() MeshOptions {
 func Mesh(mesh *voronoi.Mesh, opts MeshOptions) *image.RGBA {
 	width, height := mesh.Width, mesh.Height
 
-	// the tints run from sea level to the highest and lowest cells
-	lo, hi := math.Inf(1), math.Inf(-1)
-	for _, c := range mesh.Cells {
-		lo, hi = min(lo, c.Elevation), max(hi, c.Elevation)
-	}
-	sea := mesh.SeaLevel
-	if sea < lo {
-		sea = lo
-	}
-	colors := make([]color.RGBA, len(mesh.Cells))
-	for i, c := range mesh.Cells {
-		if c.Ocean {
-			colors[i] = waterAt(ratio(sea-c.Elevation, sea-lo))
-			continue
-		}
-		tint := tintAt(ratio(c.Elevation-sea, hi-sea))
-		colors[i] = color.RGBA{R: uint8(tint[0]), G: uint8(tint[1]), B: uint8(tint[2]), A: 255}
-	}
-
-	// owner is the cell that each pixel belongs to
-	owner := make([]int32, width*height)
-	for i := range owner {
-		owner[i] = -1
-	}
-	for i, c := range mesh.Cells {
-		fillPolygon(c.Polygon, width, height, func(y, x0, x1 int) {
-			for x := x0; x < x1; x++ {
-				owner[y*width+x] = int32(i)
-			}
-		})
-	}
-	// rounding can leave a pixel on a shared edge unclaimed; give it to the
-	// pixel before it
-	for n := range owner {
-		if owner[n] < 0 {
-			owner[n] = 0
-			if n > 0 {
-				owner[n] = owner[n-1]
-			}
-		}
-	}
-
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	for n, i := range owner {
-		img.Pix[n*4+0] = colors[i].R
-		img.Pix[n*4+1] = colors[i].G
-		img.Pix[n*4+2] = colors[i].B
-		img.Pix[n*4+3] = 255
-	}
+	colors := cellColors(mesh)
+	owner := owners(mesh)
+	img := paint(owner, colors, width, height)
 
 	// draw a border where a pixel's right or lower neighbor is in another cell
 	border := color.RGBA{R: 50, G: 40, B: 30, A: 255}
@@ -102,6 +56,69 @@ func Mesh(mesh *voronoi.Mesh, opts MeshOptions) *image.RGBA {
 				}
 			}
 		}
+	}
+	return img
+}
+
+// cellColors returns the color of each cell: an elevation tint for land and
+// a depth tint for ocean.
+func cellColors(mesh *voronoi.Mesh) []color.RGBA {
+	// the tints run from sea level to the highest and lowest cells
+	lo, hi := math.Inf(1), math.Inf(-1)
+	for _, c := range mesh.Cells {
+		lo, hi = min(lo, c.Elevation), max(hi, c.Elevation)
+	}
+	sea := mesh.SeaLevel
+	if sea < lo {
+		sea = lo
+	}
+	colors := make([]color.RGBA, len(mesh.Cells))
+	for i, c := range mesh.Cells {
+		if c.Ocean {
+			colors[i] = waterAt(ratio(sea-c.Elevation, sea-lo))
+			continue
+		}
+		tint := tintAt(ratio(c.Elevation-sea, hi-sea))
+		colors[i] = color.RGBA{R: uint8(tint[0]), G: uint8(tint[1]), B: uint8(tint[2]), A: 255}
+	}
+	return colors
+}
+
+// owners returns the cell that each pixel belongs to.
+func owners(mesh *voronoi.Mesh) []int32 {
+	width, height := mesh.Width, mesh.Height
+	owner := make([]int32, width*height)
+	for i := range owner {
+		owner[i] = -1
+	}
+	for i, c := range mesh.Cells {
+		fillPolygon(c.Polygon, width, height, func(y, x0, x1 int) {
+			for x := x0; x < x1; x++ {
+				owner[y*width+x] = int32(i)
+			}
+		})
+	}
+	// rounding can leave a pixel on a shared edge unclaimed; give it to the
+	// pixel before it
+	for n := range owner {
+		if owner[n] < 0 {
+			owner[n] = 0
+			if n > 0 {
+				owner[n] = owner[n-1]
+			}
+		}
+	}
+	return owner
+}
+
+// paint returns an image with every pixel in the color of its cell.
+func paint(owner []int32, colors []color.RGBA, width, height int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for n, i := range owner {
+		img.Pix[n*4+0] = colors[i].R
+		img.Pix[n*4+1] = colors[i].G
+		img.Pix[n*4+2] = colors[i].B
+		img.Pix[n*4+3] = 255
 	}
 	return img
 }
