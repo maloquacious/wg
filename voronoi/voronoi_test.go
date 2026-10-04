@@ -99,6 +99,116 @@ func TestNeighborsAreSymmetric(t *testing.T) {
 	}
 }
 
+func TestGraph(t *testing.T) {
+	checkGraph(t, defaultMesh(t))
+
+	// small meshes have cells that touch several sides of the map
+	hm, err := fracture.Generate(fracture.Options{Width: 160, Height: 90, Rounds: 200, Seed: 0x0123456789abcdef})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cells := range []int{3, 4, 5, 10, 100} {
+		for seed := range uint64(20) {
+			mesh, err := voronoi.Generate(hm, voronoi.Options{Cells: cells, OceanPercent: 70, Seed: seed})
+			if err != nil {
+				t.Fatalf("%d cells, seed %d: %v", cells, seed, err)
+			}
+			checkGraph(t, mesh)
+		}
+	}
+}
+
+// checkGraph checks that the cells, corners and edges of the mesh agree with
+// each other.
+func checkGraph(t *testing.T, mesh *voronoi.Mesh) {
+	t.Helper()
+	const eps = 1e-6
+	width, height := float64(mesh.Width), float64(mesh.Height)
+	onBorder := func(q voronoi.Point) bool {
+		return math.Abs(q.X) < eps || math.Abs(q.Y) < eps || math.Abs(q.X-width) < eps || math.Abs(q.Y-height) < eps
+	}
+
+	pairs := make(map[[2]int]int) // edges between each pair of cells
+	for e, edge := range mesh.Edges {
+		a, b := edge.Cells[0], edge.Cells[1]
+		if edge.Border() {
+			if !onBorder(mesh.Corners[edge.Corners[0]].Point) || !onBorder(mesh.Corners[edge.Corners[1]].Point) {
+				t.Fatalf("edge %d: border edge is not on the map border", e)
+			}
+		} else if a >= b {
+			t.Fatalf("edge %d: cells %v are out of order", e, edge.Cells)
+		} else {
+			pairs[edge.Cells]++
+		}
+		if edge.Corners[0] == edge.Corners[1] {
+			t.Fatalf("edge %d: both ends are corner %d", e, edge.Corners[0])
+		}
+	}
+
+	for i, c := range mesh.Cells {
+		if len(c.Corners) != len(c.Polygon) || len(c.Edges) != len(c.Polygon) {
+			t.Fatalf("cell %d: %d points, %d corners, %d edges", i, len(c.Polygon), len(c.Corners), len(c.Edges))
+		}
+		for n, k := range c.Corners {
+			if mesh.Corners[k].Point != c.Polygon[n] {
+				t.Fatalf("cell %d: point %d is not at corner %d", i, n, k)
+			}
+			if !slices.Contains(mesh.Corners[k].Touches, i) {
+				t.Fatalf("cell %d: corner %d does not touch it", i, k)
+			}
+			edge := mesh.Edges[c.Edges[n]]
+			next := c.Corners[(n+1)%len(c.Corners)]
+			if edge.Corners != [2]int{k, next} && edge.Corners != [2]int{next, k} {
+				t.Fatalf("cell %d: edge %d does not join corners %d and %d", i, c.Edges[n], k, next)
+			}
+			if edge.Cells[0] != i && edge.Cells[1] != i {
+				t.Fatalf("cell %d: edge %d belongs to cells %v", i, c.Edges[n], edge.Cells)
+			}
+		}
+		for _, j := range c.Neighbors {
+			if n := pairs[[2]int{min(i, j), max(i, j)}]; n != 1 {
+				t.Fatalf("cells %d and %d: %d edges between them, want 1", i, j, n)
+			}
+		}
+	}
+
+	var touches int
+	for k, corner := range mesh.Corners {
+		if corner.Border != onBorder(corner.Point) {
+			t.Fatalf("corner %d: border is %v at %v", k, corner.Border, corner.Point)
+		}
+		if !corner.Border && len(corner.Touches) < 3 {
+			t.Fatalf("corner %d: touches %d cells, want at least 3", k, len(corner.Touches))
+		}
+		if len(corner.Adjacent) != len(corner.Edges) {
+			t.Fatalf("corner %d: %d adjacent corners, %d edges", k, len(corner.Adjacent), len(corner.Edges))
+		}
+		for _, j := range corner.Adjacent {
+			if !slices.Contains(mesh.Corners[j].Adjacent, k) {
+				t.Fatalf("corner %d: lists %d, which does not list it back", k, j)
+			}
+		}
+		for _, e := range corner.Edges {
+			if mesh.Edges[e].Corners[0] != k && mesh.Edges[e].Corners[1] != k {
+				t.Fatalf("corner %d: edge %d does not end at it", k, e)
+			}
+		}
+		touches += len(corner.Touches)
+	}
+	var points int
+	for _, c := range mesh.Cells {
+		points += len(c.Corners)
+	}
+	if touches != points {
+		t.Fatalf("corners touch %d cells, cells list %d corners", touches, points)
+	}
+
+	// Euler's formula for a subdivided rectangle: V - E + F = 1
+	if v, e, f := len(mesh.Corners), len(mesh.Edges), len(mesh.Cells); v-e+f != 1 {
+		t.Errorf("%d corners - %d edges + %d cells = %d, want 1", v, e, f, v-e+f)
+	}
+}
+
 func TestOcean(t *testing.T) {
 	hm, err := defaultMap()
 	if err != nil {
