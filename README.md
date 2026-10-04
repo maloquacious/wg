@@ -1,5 +1,7 @@
 # wg
 
+![A generated map: three landmasses with forests, grassland, rivers, lakes and snow-capped peaks](docs/example-biomes.png)
+
 A fantasy map generator for gamemasters. `wg` grows a height map, lays a
 Voronoi mesh of cells over it, and works out lakes, rivers, moisture and
 biomes. It writes the result as PNG images.
@@ -80,6 +82,8 @@ An arid world, where the land between the rivers is desert:
 wg -skew 2
 ```
 
+![The example map as an arid world: pale desert between green river valleys](docs/arid-biomes.png)
+
 A wet world:
 
 ```sh
@@ -91,6 +95,8 @@ Wall the map in: land that reaches the edge of the map ends in cliffs.
 ```sh
 wg -border-cliffs
 ```
+
+![The example map with gray cliffs wherever land meets the edge of the map](docs/walled-biomes.png)
 
 Show the cells, for example to check their size before choosing a map:
 
@@ -110,6 +116,22 @@ wg -render biomes,mesh -borders
 | `biomes`   | The biome of every cell, with rivers. This is the default. |
 
 Pass several as a comma list (`-render topo,biomes`), or `all` or `none`.
+
+The pictures in this README are all one small map, 960 by 540 pixels with
+about 1,270 land cells, made with:
+
+```sh
+wg -width 960 -height 540 -ocean 52 -render topo,rivers,biomes -out docs -name example
+wg -width 960 -height 540 -ocean 52 -render mesh -borders -out docs -name example
+wg -width 960 -height 540 -ocean 52 -skew 2 -render biomes -out docs -name arid
+wg -width 960 -height 540 -ocean 52 -border-cliffs -render biomes -out docs -name walled
+```
+
+| `topo` | `mesh -borders` |
+|--------|-----------------|
+| ![Topographic render with hill shading and contours](docs/example-topo.png) | ![The cells of the mesh, outlined and tinted by height](docs/example-mesh.png) |
+| **`rivers`** | **`biomes`** |
+| ![Rivers and lakes over the height tints](docs/example-rivers.png) | ![The biome of every cell, with rivers](docs/example-biomes.png) |
 
 ### Flags
 
