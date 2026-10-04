@@ -23,6 +23,8 @@ The `-render` flag is defined in the `fracture` and `voronoi` test files. `voron
 
 A fantasy map generator built as a pipeline of stages. Each stage is a package with an `Options` struct, a `DefaultOptions()` (the values the tests use), and a `Generate` that is deterministic for the same inputs.
 
+The `voronoi` stage and the stages after it are inspired by Amit Patel's [Polygonal Map Generation for Games](http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation/). Consult it when designing later stages (elevation, moisture, rivers, biomes on the mesh).
+
 1. **`fracture`**: makes the height map. Each round raises or lowers every pixel inside a random circle by 1, and the result is normalized to 0…1. It is adapted from `pkg/generators/flat` in github.com/mdhender/mapgen; `TestMatchesReference` checks it pixel for pixel against the original's per-pixel circle test. The defaults are 1920×1080 pixels, 1,000 rounds and seed `0x0123456789abcdef`. Elevations come in whole steps (about 58 distinct levels at the defaults), and later stages and renderers have to allow for that.
 2. **`voronoi`**: lays a mesh over a `*heightmap.Map`. It triangulates random sites with `github.com/fogleman/delaunay`, builds each cell by clipping the map rectangle against the bisectors of its Delaunay neighbors (edges are labeled, so neighbors come from the clipped polygon), and runs a fixed number of Lloyd relaxation passes. A cell's elevation is the mean of the pixels whose centers lie inside it. Ocean is the lowest `OceanPercent` of cells *by count*, and `Mesh.SeaLevel` is −1 when there is no ocean. The only user-facing options are `Cells` and `OceanPercent`, plus the seed that every random stage must take.
 
