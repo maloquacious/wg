@@ -43,6 +43,19 @@ func TestRunWritesRenders(t *testing.T) {
 	}
 }
 
+func TestFractalGenerator(t *testing.T) {
+	var stdout bytes.Buffer
+	args := append(slices.Clone(small), "-generator", "fractal", "-roughness", "0.6", "-render", "none")
+	if err := run(args, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"320x180 pixels", "fractal roughness 0.6"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("summary is missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
 func TestRunWithoutRenders(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "never")
 	var stdout, stderr bytes.Buffer
@@ -102,6 +115,8 @@ func TestBadArguments(t *testing.T) {
 		{"-land-cells", "100", "-ocean", "100"},
 		{"-ocean", "101", "-render", "none"},
 		{"-skew", "0", "-render", "none"},
+		{"-generator", "perlin", "-render", "none"},
+		{"-generator", "fractal", "-roughness", "-1", "-render", "none"},
 		{"stray"},
 		{"-no-such-flag"},
 	} {

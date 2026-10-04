@@ -28,7 +28,9 @@ import (
 
 	"github.com/maloquacious/wg"
 	"github.com/maloquacious/wg/biomes"
+	"github.com/maloquacious/wg/fractal"
 	"github.com/maloquacious/wg/fracture"
+	"github.com/maloquacious/wg/heightmap"
 	"github.com/maloquacious/wg/moisture"
 	"github.com/maloquacious/wg/render"
 	"github.com/maloquacious/wg/rivers"
@@ -49,9 +51,15 @@ func main() {
 // renders lists the images wg can write, in the order it writes them.
 var renders = []string{"topo", "mesh", "terrain", "rivers", "moisture", "biomes"}
 
-// config holds the parsed flags.
+// generators lists the height map generators.
+var generators = []string{"fracture", "fractal"}
+
+// config holds the parsed flags. The map size and seed are kept in fracture
+// and copied to the other generators.
 type config struct {
+	generator string
 	fracture  fracture.Options
+	fractal   fractal.Options
 	voronoi   voronoi.Options
 	terrain   terrain.Options
 	rivers    rivers.Options
@@ -72,6 +80,7 @@ type config struct {
 func parse(args []string, stderr io.Writer) (*config, error) {
 	c := &config{
 		fracture: fracture.DefaultOptions(),
+		fractal:  fractal.DefaultOptions(),
 		voronoi:  voronoi.DefaultOptions(),
 		terrain:  terrain.DefaultOptions(),
 		rivers:   rivers.DefaultOptions(),
@@ -88,7 +97,9 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 	fs.Uint64Var(&c.fracture.Seed, "seed", c.fracture.Seed, "seed for every random stage")
 	fs.IntVar(&c.fracture.Width, "width", c.fracture.Width, "map width in pixels")
 	fs.IntVar(&c.fracture.Height, "height", c.fracture.Height, "map height in pixels")
+	fs.StringVar(&c.generator, "generator", "fracture", "height map generator: "+strings.Join(generators, " or "))
 	fs.IntVar(&c.fracture.Rounds, "rounds", c.fracture.Rounds, "fracture rounds; more rounds give rougher terrain")
+	fs.Float64Var(&c.fractal.Roughness, "roughness", c.fractal.Roughness, "fractal roughness, 0 or more; larger values give smoother land")
 	fs.IntVar(&c.landCells, "land-cells", 0, "target number of land cells; when set, the map size is worked out from it, keeping the width:height ratio")
 	fs.Float64Var(&c.voronoi.CellSize, "cell-size", c.voronoi.CellSize, "mean cell width in pixels")
 	fs.IntVar(&c.voronoi.OceanPercent, "ocean", c.voronoi.OceanPercent, "percentage of cells, 0-100, that are ocean")
@@ -115,6 +126,10 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 		return nil, fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
+	if !slices.Contains(generators, c.generator) {
+		return nil, fmt.Errorf("unknown generator %q: want %s", c.generator, strings.Join(generators, " or "))
+	}
+
 	switch *renderList {
 	case "all":
 		c.render = slices.Clone(renders)
@@ -136,7 +151,18 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 			return nil, err
 		}
 	}
+	c.fractal.Width, c.fractal.Height, c.fractal.Seed = c.fracture.Width, c.fracture.Height, c.fracture.Seed
 	return c, nil
+}
+
+// heightMap runs the chosen generator and describes it for the summary.
+func (c *config) heightMap() (*heightmap.Map, string, error) {
+	if c.generator == "fractal" {
+		hm, err := fractal.Generate(c.fractal)
+		return hm, fmt.Sprintf("fractal roughness %g", c.fractal.Roughness), err
+	}
+	hm, err := fracture.Generate(c.fracture)
+	return hm, fmt.Sprintf("%d fracture rounds", c.fracture.Rounds), err
 }
 
 // sizeForLandCells sets the map size so that the mesh has about landCells
@@ -173,7 +199,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	start := time.Now()
-	hm, err := fracture.Generate(c.fracture)
+	hm, generator, err := c.heightMap()
 	if err != nil {
 		return err
 	}
@@ -210,8 +236,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 			riverEdges++
 		}
 	}
-	fmt.Fprintf(stdout, "wg %s: seed %#x, %dx%d pixels, %d rounds, generated in %v\n",
-		wg.Version(), c.fracture.Seed, hm.Width, hm.Height, c.fracture.Rounds, elapsed.Round(time.Millisecond))
+	fmt.Fprintf(stdout, "wg %s: seed %#x, %dx%d pixels, %s, generated in %v\n",
+		wg.Version(), c.fracture.Seed, hm.Width, hm.Height, generator, elapsed.Round(time.Millisecond))
 	fmt.Fprintf(stdout, "%d cells (%d land, %d ocean), %d lakes, %d river edges\n",
 		len(mesh.Cells), land, count[biomes.Ocean], len(tr.Lakes), riverEdges)
 	if c.stats {

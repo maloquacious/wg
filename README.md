@@ -76,6 +76,14 @@ A large map with rough terrain, and the share of each biome:
 wg -width 2000 -height 2000 -rounds 10000 -ocean 52 -stats
 ```
 
+Smoother land from the fractal generator, with jagged coasts and islands at a
+lower roughness:
+
+```sh
+wg -generator fractal
+wg -generator fractal -roughness 0.5
+```
+
 An arid world, where the land between the rivers is desert:
 
 ```sh
@@ -151,7 +159,9 @@ wg -width 960 -height 540 -ocean 52 -icons -render biomes -out docs -name icons
 | `-seed` | `0x0123456789abcdef` | Seed for the random stages. Decimal or `0x` hex. |
 | `-width`, `-height` | `1920`, `1080` | Map size in pixels. With `-land-cells`, only their ratio is used. |
 | `-land-cells` | off | Target number of land cells. Sets the map size. |
-| `-rounds` | `1000` | Rounds of terrain building. More rounds give rougher terrain. |
+| `-generator` | `fracture` | How the height map is made: `fracture` or `fractal`. |
+| `-rounds` | `1000` | Rounds of terrain building for `fracture`. More rounds give rougher terrain. |
+| `-roughness` | `0.8` | Smoothness of the land for `fractal`. Lower values break the coast into islands; higher values give smooth, rounded land. |
 | `-cell-size` | `14` | Mean width of a cell in pixels. |
 | `-ocean` | `70` | Percentage of cells that are ocean. |
 | `-lake-depth` | `0.01` | How deep a hollow must be to fill with a lake. |
@@ -177,7 +187,9 @@ wg -width 960 -height 540 -ocean 52 -icons -render biomes -out docs -name icons
 Each stage is a Go package, run in this order:
 
 1. **`fracture`** builds the height map. Each round raises or lowers a random
-   circle of the map.
+   circle of the map. **`fractal`** (`-generator fractal`) builds it instead
+   with the diamond-square algorithm, which gives smooth slopes rather than
+   steps.
 2. **`voronoi`** covers the map with cells and gives each the mean height of
    the pixels in it. The lowest cells become ocean.
 3. **`terrain`** fills hollows so that all water drains to the sea or off the
@@ -200,8 +212,10 @@ result for the same input.
   and its mapgen2 code, with changes: elevation comes from the height map,
   rivers form wherever enough rain collects, the sea wets the coast, and the
   coast can be rocky or cliff as well as beach.
-- The height map is adapted from `pkg/generators/flat` in
-  [mdhender/mapgen](https://github.com/mdhender/mapgen).
+- The height maps are adapted from `pkg/generators/flat` and
+  `pkg/generators/fractal` in [mdhender/mapgen](https://github.com/mdhender/mapgen).
+  The fractal generator follows Paul Martz's "Generating Random Fractal
+  Terrain".
 - The topographic render follows the recipe in
   [mdhender/vetopo](https://github.com/mdhender/vetopo).
 - Biome colors are from Red Blob Games' mapgen2 palette, Copyright 2017 Red
