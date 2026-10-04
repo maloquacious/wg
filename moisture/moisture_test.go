@@ -63,7 +63,48 @@ func freshWater(n *rivers.Network, k int) bool {
 // TestEvenlySpread checks that ocean and coast corners are 1 and that the
 // land corners take evenly spaced values from 0 to 1.
 func TestEvenlySpread(t *testing.T) {
-	m := generate(t, moisture.DefaultOptions())
+	checkSpread(t, generate(t, moisture.DefaultOptions()), 1)
+}
+
+// TestSkew checks that the land corners take evenly spaced values raised to
+// the power Skew, that the order of the land does not change, and that a
+// larger skew leaves more of the land in the desert range.
+func TestSkew(t *testing.T) {
+	even := generate(t, moisture.DefaultOptions())
+	prevDry := -1.0
+	for _, skew := range []float64{0.5, 1, 2, 3} {
+		opts := moisture.DefaultOptions()
+		opts.Skew = skew
+		m := generate(t, opts)
+		checkSpread(t, m, skew)
+
+		var dry, land float64
+		for k, c := range m.Rivers.Terrain.Corners {
+			if c.Ocean || c.Coast {
+				continue
+			}
+			land++
+			if m.Corners[k] < 0.16 {
+				dry++
+			}
+			// the skew is a monotone map of the even values
+			if want := math.Pow(even.Corners[k], skew); math.Abs(m.Corners[k]-want) > 1e-12 {
+				t.Fatalf("skew %g: corner %d moisture %g, want %g", skew, k, m.Corners[k], want)
+			}
+		}
+		if want := math.Pow(0.16, 1/skew); math.Abs(dry/land-want) > 0.01 {
+			t.Errorf("skew %g: %.3f of land below 0.16, want %.3f", skew, dry/land, want)
+		}
+		if dry/land <= prevDry {
+			t.Errorf("skew %g: %.3f of land below 0.16, not more than at the smaller skew", skew, dry/land)
+		}
+		t.Logf("skew %.1f: %4.1f%% of land below 0.16", skew, 100*dry/land)
+		prevDry = dry / land
+	}
+}
+
+func checkSpread(t *testing.T, m *moisture.Map, skew float64) {
+	t.Helper()
 	tr := m.Rivers.Terrain
 	var land []float64
 	for k, c := range tr.Corners {
@@ -77,7 +118,7 @@ func TestEvenlySpread(t *testing.T) {
 	}
 	slices.Sort(land)
 	for rank, v := range land {
-		if want := float64(rank) / float64(len(land)-1); math.Abs(v-want) > 1e-12 {
+		if want := math.Pow(float64(rank)/float64(len(land)-1), skew); math.Abs(v-want) > 1e-12 {
 			t.Fatalf("rank %d of %d: moisture %g, want %g", rank, len(land), v, want)
 		}
 	}
@@ -89,7 +130,7 @@ func TestEvenlySpread(t *testing.T) {
 // that no source can reach is drier than all that one can. With the sea
 // turned off, only fresh water is a source.
 func TestNoDryHollows(t *testing.T) {
-	for _, opts := range []moisture.Options{moisture.DefaultOptions(), {Spread: 100, SeaStrength: 0}} {
+	for _, opts := range []moisture.Options{moisture.DefaultOptions(), {Spread: 100, SeaStrength: 0, Skew: 1}} {
 		t.Run(fmt.Sprintf("sea %g", opts.SeaStrength), func(t *testing.T) {
 			checkNoDryHollows(t, generate(t, opts), opts.SeaStrength > 0)
 		})
@@ -187,7 +228,7 @@ func TestCells(t *testing.T) {
 // TestBigRiversReachFurther checks that Spread weighs large rivers: with a
 // longer Spread, the corners near the largest rivers rank wetter.
 func TestBigRiversReachFurther(t *testing.T) {
-	short, long := generate(t, moisture.Options{Spread: 10}), generate(t, moisture.Options{Spread: 1000})
+	short, long := generate(t, moisture.Options{Spread: 10, SeaStrength: 2, Skew: 1}), generate(t, moisture.Options{Spread: 1000, SeaStrength: 2, Skew: 1})
 	n := short.Rivers
 	mesh := n.Terrain.Mesh
 
@@ -224,7 +265,7 @@ func TestBigRiversReachFurther(t *testing.T) {
 // TestSeaWetsTheCoast checks that the sea makes the land just behind the
 // coast wetter and leaves the driest land inland.
 func TestSeaWetsTheCoast(t *testing.T) {
-	without := generate(t, moisture.Options{Spread: 100, SeaStrength: 0})
+	without := generate(t, moisture.Options{Spread: 100, SeaStrength: 0, Skew: 1})
 	with := generate(t, moisture.DefaultOptions())
 	tr, mesh := with.Rivers.Terrain, with.Rivers.Terrain.Mesh
 
@@ -293,12 +334,17 @@ func TestGenerateRejectsBadOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, spread := range []float64{0, -1, math.NaN(), math.Inf(1)} {
-		if _, err := moisture.Generate(n, moisture.Options{Spread: spread}); err == nil {
+		if _, err := moisture.Generate(n, moisture.Options{Spread: spread, Skew: 1}); err == nil {
 			t.Errorf("spread %g: want error, got nil", spread)
 		}
 	}
+	for _, skew := range []float64{0, -1, math.NaN(), math.Inf(1)} {
+		if _, err := moisture.Generate(n, moisture.Options{Spread: 100, SeaStrength: 2, Skew: skew}); err == nil {
+			t.Errorf("skew %g: want error, got nil", skew)
+		}
+	}
 	for _, sea := range []float64{-1, 3.5, math.NaN()} {
-		if _, err := moisture.Generate(n, moisture.Options{Spread: 100, SeaStrength: sea}); err == nil {
+		if _, err := moisture.Generate(n, moisture.Options{Spread: 100, SeaStrength: sea, Skew: 1}); err == nil {
 			t.Errorf("sea strength %g: want error, got nil", sea)
 		}
 	}

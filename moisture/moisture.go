@@ -17,7 +17,8 @@
 //     across the sea.
 //   - Land that no source reaches is the driest.
 //   - The land corners are ranked by wetness and given evenly spaced values
-//     from 0 (driest) to 1 (wettest). Ocean and coast corners are 1.
+//     from 0 (driest) to 1 (wettest), raised to the power Skew. Ocean and
+//     coast corners are 1.
 //   - A cell's moisture is the mean of its corners.
 //
 // Distances are in pixels, so the result does not depend on the cell size.
@@ -42,11 +43,18 @@ type Options struct {
 	// SeaStrength is the strength of the coast as a source, where a lake
 	// is 1. Zero turns the sea off as a source.
 	SeaStrength float64
+	// Skew bends the land's moisture toward dry or wet without changing
+	// which land is wettest: each land corner's evenly spaced rank, in
+	// 0...1, is raised to the power Skew. 1 leaves the moisture even.
+	// Above 1 makes an arid world: at 2, about 40% of the land is drier
+	// than 0.16, where the biome table turns to desert, against 16% at 1.
+	// Below 1 makes a wet world: at 0.5, about 3%.
+	Skew float64
 }
 
 // DefaultOptions returns the options used by the tests.
 func DefaultOptions() Options {
-	return Options{Spread: 100, SeaStrength: 2}
+	return Options{Spread: 100, SeaStrength: 2, Skew: 1}
 }
 
 // maxStrength caps how much wetter than a lake the largest rivers are.
@@ -67,6 +75,9 @@ func Generate(n *rivers.Network, opts Options) (*Map, error) {
 	}
 	if !(opts.SeaStrength >= 0) || opts.SeaStrength > maxStrength {
 		return nil, fmt.Errorf("moisture: invalid sea strength %g", opts.SeaStrength)
+	}
+	if !(opts.Skew > 0) || math.IsInf(opts.Skew, 1) {
+		return nil, fmt.Errorf("moisture: invalid skew %g", opts.Skew)
 	}
 	t := n.Terrain
 	mesh := t.Mesh
@@ -135,7 +146,7 @@ func Generate(n *rivers.Network, opts Options) (*Map, error) {
 	for rank, k := range land {
 		m.Corners[k] = 1
 		if len(land) > 1 {
-			m.Corners[k] = 1 - float64(rank)/float64(len(land)-1)
+			m.Corners[k] = math.Pow(1-float64(rank)/float64(len(land)-1), opts.Skew)
 		}
 	}
 
