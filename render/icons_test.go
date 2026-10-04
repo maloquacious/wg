@@ -56,7 +56,7 @@ func TestDrawIcon(t *testing.T) {
 		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = 255, 255, 255, 255
 	}
 	// a 20-pixel tree, partly off the left edge
-	drawIcon(img, icons[rowForest][0], -5, 10, 0.2)
+	drawIcon(img, icons[rowForest][0], -5, 10, 0.2, 1)
 	inked := 0
 	for y := range 40 {
 		for x := range 40 {

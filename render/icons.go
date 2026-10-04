@@ -73,6 +73,16 @@ var iconRow = map[biomes.Biome]int{
 // inkColor is the color the icons are drawn in.
 var inkColor = color.RGBA{R: 30, G: 26, B: 20, A: 255}
 
+// Waves are drawn sparsely and lightly, so that the sea does not become a
+// dark hatching that draws the eye from the land. Only ocean cells within
+// waveReach cells of land get waves, and of those, and of lake cells, only
+// waveShare do. Waves are drawn at waveInk of the strength of other icons.
+const (
+	waveReach = 2
+	waveShare = 0.4
+	waveInk   = 0.45
+)
+
 // minIconStroke is the narrowest line, in pixels, that an icon is drawn
 // with, so that small icons stay visible.
 const minIconStroke = 0.9
@@ -238,33 +248,72 @@ func flattenPath(data string, width float64) ([]segment, error) {
 // drawIcons draws a biome icon in each cell that has one, as mapgen2 does:
 // the icon fills a square centered on the cell's site whose half-width is
 // the distance from the site to its nearest corner, and which of the five
-// drawings it gets is chosen at random from seed. The sheet is embedded, so
-// it panics only if the sheet is broken, which TestIconSheet checks.
+// drawings it gets is chosen at random from seed. Unlike mapgen2, it draws
+// waves only on some water near land, and lightly (see waveReach). The
+// sheet is embedded, so it panics only if the sheet is broken, which
+// TestIconSheet checks.
 func drawIcons(img *image.RGBA, b *biomes.Map, seed uint64) {
 	icons, err := loadIcons()
 	if err != nil {
 		panic(err)
 	}
+	mesh := b.Moisture.Rivers.Terrain.Mesh
+	reach := oceanReach(b)
 	rnd := rand.New(rand.NewPCG(seed, seed))
-	for i, c := range b.Moisture.Rivers.Terrain.Mesh.Cells {
+	for i, c := range mesh.Cells {
 		row, ok := iconRow[b.Cells[i]]
 		if !ok {
 			continue
 		}
 		col := rnd.IntN(iconColumns)
+		ink := 1.0
+		if row == rowWater {
+			if rnd.Float64() >= waveShare || reach[i] > waveReach {
+				continue
+			}
+			ink = waveInk
+		}
 		radius := math.Inf(1)
 		for _, p := range c.Polygon {
 			radius = min(radius, math.Hypot(p.X-c.Site.X, p.Y-c.Site.Y))
 		}
-		drawIcon(img, icons[row][col], c.Site.X-radius, c.Site.Y-radius, 2*radius/iconSize)
+		drawIcon(img, icons[row][col], c.Site.X-radius, c.Site.Y-radius, 2*radius/iconSize, ink)
 	}
 }
 
+// oceanReach returns, for each ocean cell, how many cells it lies from the
+// nearest land cell (1 for ocean next to land), found by a breadth-first
+// search through the ocean. Land cells are 0, and ocean with no land at all
+// is MaxInt.
+func oceanReach(b *biomes.Map) []int {
+	cells := b.Moisture.Rivers.Terrain.Mesh.Cells
+	reach := make([]int, len(cells))
+	var queue []int
+	for i := range cells {
+		if b.Cells[i] == biomes.Ocean {
+			reach[i] = math.MaxInt
+		} else {
+			queue = append(queue, i)
+		}
+	}
+	for len(queue) > 0 {
+		i := queue[0]
+		queue = queue[1:]
+		for _, n := range cells[i].Neighbors {
+			if reach[n] == math.MaxInt {
+				reach[n] = reach[i] + 1
+				queue = append(queue, n)
+			}
+		}
+	}
+	return reach
+}
+
 // drawIcon draws ic with its top left corner at (left, top), scaled by
-// scale pixels per sheet unit. Each pixel takes the coverage of the stroke
+// scale pixels per sheet unit, at ink (0…1) of full strength. Each pixel takes the coverage of the stroke
 // nearest its center, so the lines are antialiased and overlapping strokes
 // do not darken one another.
-func drawIcon(img *image.RGBA, ic icon, left, top, scale float64) {
+func drawIcon(img *image.RGBA, ic icon, left, top, scale, ink float64) {
 	bounds := img.Bounds().Intersect(image.Rect(
 		int(math.Floor(left))-2, int(math.Floor(top))-2,
 		int(math.Ceil(left+iconSize*scale))+2, int(math.Ceil(top+iconSize*scale))+2))
@@ -297,7 +346,7 @@ func drawIcon(img *image.RGBA, ic icon, left, top, scale float64) {
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			if a := cover[(y-bounds.Min.Y)*bounds.Dx()+x-bounds.Min.X]; a > 0 {
-				img.SetRGBA(x, y, blend(img.RGBAAt(x, y), inkColor, a))
+				img.SetRGBA(x, y, blend(img.RGBAAt(x, y), inkColor, ink*a))
 			}
 		}
 	}

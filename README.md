@@ -99,7 +99,8 @@ wg -border-cliffs
 ![The example map with gray cliffs wherever land meets the edge of the map](docs/walled-biomes.png)
 
 Draw Red Blob Games' hand-drawn icons in the biomes image: waves, mountains,
-trees, grass, cacti and reeds. Which drawing each cell gets follows the seed.
+trees, grass, cacti and reeds. Waves are drawn faintly, and only here and
+there near the shore. Which drawing each cell gets follows the seed.
 
 ```sh
 wg -icons
