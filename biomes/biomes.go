@@ -8,6 +8,10 @@
 // mapgen2 reshapes elevations so that every map has the same share of land
 // in each altitude zone. This package does not: altitude runs linearly from
 // sea level (0) to the highest cell (1), so a low world has little snow.
+//
+// mapgen2 makes every land cell next to the ocean a beach. Here only low
+// coastal cells are beaches; the rest, where the land rises quickly from the
+// sea, are rocky shore.
 package biomes
 
 import (
@@ -23,9 +27,10 @@ type Biome uint8
 const (
 	Ocean Biome = iota
 	Lake
-	Marsh // a lake at low altitude
-	Ice   // a lake at high altitude
-	Beach // land next to the ocean
+	Marsh      // a lake at low altitude
+	Ice        // a lake at high altitude
+	Beach      // low land next to the ocean
+	RockyShore // higher land next to the ocean
 	Snow
 	Tundra
 	Bare
@@ -48,6 +53,7 @@ var names = [numBiomes]string{
 	Marsh:                    "MARSH",
 	Ice:                      "ICE",
 	Beach:                    "BEACH",
+	RockyShore:               "ROCKY_SHORE",
 	Snow:                     "SNOW",
 	Tundra:                   "TUNDRA",
 	Bare:                     "BARE",
@@ -63,7 +69,8 @@ var names = [numBiomes]string{
 	TropicalSeasonalForest:   "TROPICAL_SEASONAL_FOREST",
 }
 
-// String returns the biome's name in mapgen2, such as "TEMPERATE_DESERT".
+// String returns the biome's name, such as "TEMPERATE_DESERT". Every biome
+// but ROCKY_SHORE is named as in mapgen2.
 func (b Biome) String() string {
 	if b < numBiomes {
 		return names[b]
@@ -80,12 +87,16 @@ func All() []Biome {
 	return all
 }
 
-// Options configures the biomes. There are no options yet.
-type Options struct{}
+// Options configures the biomes.
+type Options struct {
+	// RockyAltitude is the altitude above which a cell next to the ocean is
+	// rocky shore rather than beach.
+	RockyAltitude float64
+}
 
 // DefaultOptions returns the options used by the tests.
 func DefaultOptions() Options {
-	return Options{}
+	return Options{RockyAltitude: 0.04}
 }
 
 // Map holds the biome of every cell.
@@ -100,6 +111,9 @@ type Map struct {
 // Generate assigns the biomes for m. The same moisture map always produces
 // the same biomes.
 func Generate(m *moisture.Map, opts Options) (*Map, error) {
+	if !(opts.RockyAltitude >= 0) {
+		return nil, fmt.Errorf("biomes: invalid rocky altitude %g", opts.RockyAltitude)
+	}
 	t := m.Rivers.Terrain
 	sea := max(t.Mesh.SeaLevel, 0)
 	top := sea
@@ -116,14 +130,14 @@ func Generate(m *moisture.Map, opts Options) (*Map, error) {
 		if !c.Ocean && top > sea {
 			b.Altitude[i] = min(max((c.Elevation-sea)/(top-sea), 0), 1)
 		}
-		b.Cells[i] = Classify(c.Ocean, c.Lake >= 0, c.Coast, b.Altitude[i], m.Cells[i])
+		b.Cells[i] = opts.Classify(c.Ocean, c.Lake >= 0, c.Coast, b.Altitude[i], m.Cells[i])
 	}
 	return b, nil
 }
 
-// Classify returns the biome of a cell from mapgen2's table. altitude and
-// moisture are in 0...1.
-func Classify(ocean, lake, coast bool, altitude, moisture float64) Biome {
+// Classify returns the biome of a cell from mapgen2's table, with coastal
+// cells split into beach and rocky shore. altitude and moisture are in 0...1.
+func (o Options) Classify(ocean, lake, coast bool, altitude, moisture float64) Biome {
 	switch {
 	case ocean:
 		return Ocean
@@ -135,6 +149,8 @@ func Classify(ocean, lake, coast bool, altitude, moisture float64) Biome {
 			return Ice
 		}
 		return Lake
+	case coast && altitude > o.RockyAltitude:
+		return RockyShore
 	case coast:
 		return Beach
 	case altitude > 0.8:

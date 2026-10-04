@@ -37,8 +37,10 @@ func TestPaletteMatchesResource(t *testing.T) {
 		}
 	}
 	for _, b := range biomes.All() {
-		if _, ok := palette[b.String()]; !ok {
-			t.Errorf("biome %v has no color", b)
+		_, mapgen2 := palette[b.String()]
+		_, own := ownColors[b.String()]
+		if mapgen2 == own {
+			t.Errorf("biome %v: in mapgen2's palette %v, in ours %v; want exactly one", b, mapgen2, own)
 		}
 	}
 }

@@ -4,6 +4,7 @@ package biomes_test
 
 import (
 	"flag"
+	"math"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -46,11 +47,16 @@ var defaultMoisture = sync.OnceValues(func() (*moisture.Map, error) {
 
 func generate(t *testing.T) *biomes.Map {
 	t.Helper()
+	return generateWith(t, biomes.DefaultOptions())
+}
+
+func generateWith(t *testing.T, opts biomes.Options) *biomes.Map {
+	t.Helper()
 	m, err := defaultMoisture()
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := biomes.Generate(m, biomes.DefaultOptions())
+	b, err := biomes.Generate(m, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +75,9 @@ func TestClassify(t *testing.T) {
 		{lake: true, altitude: 0.5, want: biomes.Lake},
 		{lake: true, altitude: 0.85, want: biomes.Ice},
 		{lake: true, coast: true, altitude: 0.5, want: biomes.Lake},
-		{coast: true, altitude: 0.9, moisture: 0, want: biomes.Beach},
+		{coast: true, altitude: 0.04, moisture: 0.9, want: biomes.Beach},
+		{coast: true, altitude: 0.041, moisture: 0, want: biomes.RockyShore},
+		{coast: true, altitude: 0.9, moisture: 0.9, want: biomes.RockyShore},
 
 		{altitude: 0.81, moisture: 0.51, want: biomes.Snow},
 		{altitude: 0.81, moisture: 0.5, want: biomes.Tundra},
@@ -90,7 +98,7 @@ func TestClassify(t *testing.T) {
 		{altitude: 0, moisture: 0.33, want: biomes.Grassland},
 		{altitude: 0, moisture: 0.16, want: biomes.SubtropicalDesert},
 	} {
-		if got := biomes.Classify(tc.ocean, tc.lake, tc.coast, tc.altitude, tc.moisture); got != tc.want {
+		if got := biomes.DefaultOptions().Classify(tc.ocean, tc.lake, tc.coast, tc.altitude, tc.moisture); got != tc.want {
 			t.Errorf("%+v: got %v", tc, got)
 		}
 	}
@@ -108,7 +116,7 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("cell %d: altitude %g", i, a)
 		}
 		top = max(top, a)
-		if want := biomes.Classify(c.Ocean, c.Lake >= 0, c.Coast, a, b.Moisture.Cells[i]); b.Cells[i] != want {
+		if want := biomes.DefaultOptions().Classify(c.Ocean, c.Lake >= 0, c.Coast, a, b.Moisture.Cells[i]); b.Cells[i] != want {
 			t.Fatalf("cell %d: biome %v, want %v", i, b.Cells[i], want)
 		}
 		count[b.Cells[i]]++
@@ -127,9 +135,51 @@ func TestGenerate(t *testing.T) {
 		t.Logf("%-26v %5d cells %5.1f%% of land", biome, count[biome], 100*float64(count[biome])/float64(land))
 	}
 	// the default map has land in every altitude zone
-	for _, biome := range []biomes.Biome{biomes.Beach, biomes.Grassland, biomes.TropicalRainForest, biomes.TemperateDeciduousForest} {
+	for _, biome := range []biomes.Biome{biomes.Beach, biomes.RockyShore, biomes.Grassland, biomes.TropicalRainForest, biomes.TemperateDeciduousForest} {
 		if count[biome] == 0 {
 			t.Errorf("no %v cells", biome)
+		}
+	}
+}
+
+// TestRockyAltitude checks that raising the threshold turns rocky shore
+// into beach and leaves every other cell alone.
+func TestRockyAltitude(t *testing.T) {
+	var prev *biomes.Map
+	prevRocky := -1
+	for _, th := range []float64{1, 0.08, 0.04, 0.02, 0} {
+		b := generateWith(t, biomes.Options{RockyAltitude: th})
+		var rocky int
+		for i, biome := range b.Cells {
+			if biome == biomes.RockyShore {
+				rocky++
+				if b.Altitude[i] <= th {
+					t.Fatalf("threshold %g: cell %d at altitude %g is rocky", th, i, b.Altitude[i])
+				}
+			}
+			if prev != nil && biome != prev.Cells[i] && (prev.Cells[i] != biomes.Beach || biome != biomes.RockyShore) {
+				t.Fatalf("threshold %g: cell %d changed from %v to %v", th, i, prev.Cells[i], biome)
+			}
+		}
+		if th == 1 && rocky != 0 {
+			t.Errorf("threshold 1: %d rocky cells, want none", rocky)
+		}
+		if rocky < prevRocky {
+			t.Errorf("threshold %g: %d rocky cells, fewer than the %d at the higher threshold", th, rocky, prevRocky)
+		}
+		t.Logf("threshold %.2f: %d rocky shore cells", th, rocky)
+		prev, prevRocky = b, rocky
+	}
+}
+
+func TestGenerateRejectsBadOptions(t *testing.T) {
+	m, err := defaultMoisture()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, th := range []float64{-0.1, math.NaN()} {
+		if _, err := biomes.Generate(m, biomes.Options{RockyAltitude: th}); err == nil {
+			t.Errorf("rocky altitude %g: want error, got nil", th)
 		}
 	}
 }

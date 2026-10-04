@@ -22,8 +22,12 @@ func DefaultBiomesOptions() BiomesOptions {
 	return BiomesOptions{Scale: DefaultRiversOptions().Scale}
 }
 
-// BiomeColor returns the mapgen2 color of b.
+// BiomeColor returns the color of b: mapgen2's, or ours for the biomes
+// that mapgen2 does not have.
 func BiomeColor(b biomes.Biome) color.RGBA {
+	if c, ok := ownColors[b.String()]; ok {
+		return c
+	}
 	return palette[b.String()]
 }
 
