@@ -33,6 +33,8 @@ func DefaultOptions() Options {
 // Network holds the flow of water over a terrain.
 type Network struct {
 	Terrain *terrain.Terrain
+	// MinFlow is the least flow that made an edge a river.
+	MinFlow float64
 	// Flow is the water passing through each corner: its own rain plus
 	// everything that flows into it. It is 0 for ocean corners.
 	Flow []float64
@@ -50,6 +52,7 @@ func Generate(t *terrain.Terrain, opts Options) (*Network, error) {
 	mesh := t.Mesh
 	n := &Network{
 		Terrain: t,
+		MinFlow: opts.MinFlow,
 		Flow:    make([]float64, len(t.Corners)),
 		River:   make([]float64, len(mesh.Edges)),
 	}

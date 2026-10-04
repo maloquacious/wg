@@ -32,16 +32,21 @@ var riverColor = color.RGBA{R: 0x22, G: 0x55, B: 0x88, A: 255}
 // draws each river with a width that grows with the square root of its flow.
 func Rivers(n *rivers.Network, opts RiversOptions) *image.RGBA {
 	img := Terrain(n.Terrain, TerrainOptions{Borders: opts.Borders})
+	drawRivers(img, n, opts.Scale)
+	return img
+}
+
+// drawRivers draws each river of n into img, scale·√flow pixels wide.
+func drawRivers(img *image.RGBA, n *rivers.Network, scale float64) {
 	mesh := n.Terrain.Mesh
 	for e, flow := range n.River {
 		if flow == 0 {
 			continue
 		}
 		a, b := mesh.Corners[mesh.Edges[e].Corners[0]].Point, mesh.Corners[mesh.Edges[e].Corners[1]].Point
-		width := max(1, opts.Scale*math.Sqrt(flow))
+		width := max(1, scale*math.Sqrt(flow))
 		drawWideLine(img, a.X, a.Y, b.X, b.Y, width, riverColor)
 	}
-	return img
 }
 
 // drawWideLine paints the pixels whose centers lie within width/2 of the
