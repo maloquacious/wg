@@ -106,6 +106,17 @@ type Mesh struct {
 	SeaLevel float64
 }
 
+// EdgeBetween returns the index of the edge that joins corners a and b, or
+// -1 when they are not adjacent.
+func (m *Mesh) EdgeBetween(a, b int) int {
+	for _, e := range m.Corners[a].Edges {
+		if c := m.Edges[e].Corners; c == [2]int{a, b} || c == [2]int{b, a} {
+			return e
+		}
+	}
+	return -1
+}
+
 // Generate lays a mesh over hm. The same map and options always produce the
 // same mesh.
 func Generate(hm *heightmap.Map, opts Options) (*Mesh, error) {
