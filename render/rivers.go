@@ -13,13 +13,14 @@ import (
 // RiversOptions configures Rivers.
 type RiversOptions struct {
 	// Scale sets the width of a river: Scale times the square root of its
-	// flow, in pixels, and never less than one pixel.
+	// flow, which is an area in square pixels, and never less than one
+	// pixel.
 	Scale float64
 }
 
 // DefaultRiversOptions returns the options used by the tests.
 func DefaultRiversOptions() RiversOptions {
-	return RiversOptions{Scale: 0.3}
+	return RiversOptions{Scale: 0.03}
 }
 
 // riverColor is the RIVER color from the Red Blob Games mapgen2 palette.
@@ -35,7 +36,7 @@ func Rivers(n *rivers.Network, opts RiversOptions) *image.RGBA {
 			continue
 		}
 		a, b := mesh.Corners[mesh.Edges[e].Corners[0]].Point, mesh.Corners[mesh.Edges[e].Corners[1]].Point
-		width := max(1, opts.Scale*math.Sqrt(float64(flow)))
+		width := max(1, opts.Scale*math.Sqrt(flow))
 		drawWideLine(img, a.X, a.Y, b.X, b.Y, width, riverColor)
 	}
 	return img

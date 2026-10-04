@@ -4,6 +4,7 @@ package rivers_test
 
 import (
 	"flag"
+	"math"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -47,31 +48,39 @@ func generate(t *testing.T, opts rivers.Options) *rivers.Network {
 	return n
 }
 
-// TestFlowIsConserved checks that every corner passes on its own rain plus
-// all the water that flows into it, and that all the rain reaches an outlet.
+// TestFlowIsConserved checks that every corner passes on everything that
+// flows into it, and that all the rain on the land reaches an outlet.
 func TestFlowIsConserved(t *testing.T) {
 	n := generate(t, rivers.DefaultOptions())
 	tr := n.Terrain
-	want := make([]int, len(tr.Corners))
-	var rain, out int
+	inflow := make([]float64, len(tr.Corners))
+	rain := make([]float64, len(tr.Corners)) // each land cell's area, shared among its corners
+	var land, out float64
+	for i, c := range tr.Mesh.Cells {
+		if !tr.Cells[i].Ocean {
+			land += c.Area()
+			for _, k := range c.Corners {
+				rain[k] += c.Area() / float64(len(c.Corners))
+			}
+		}
+	}
 	for k, c := range tr.Corners {
-		if !c.Ocean {
-			want[k]++
-			rain++
+		if c.Ocean && n.Flow[k] != 0 {
+			t.Fatalf("ocean corner %d: flow %g", k, n.Flow[k])
 		}
 		if c.Downslope >= 0 {
-			want[c.Downslope] += n.Flow[k]
+			inflow[c.Downslope] += n.Flow[k]
 		} else {
 			out += n.Flow[k]
 		}
 	}
-	for k := range want {
-		if n.Flow[k] != want[k] {
-			t.Fatalf("corner %d: flow %d, want %d", k, n.Flow[k], want[k])
+	for k := range inflow {
+		if want := rain[k] + inflow[k]; math.Abs(n.Flow[k]-want) > 1e-6*max(want, 1) {
+			t.Fatalf("corner %d: flow %g, want rain %g + inflow %g", k, n.Flow[k], rain[k], inflow[k])
 		}
 	}
-	if out != rain {
-		t.Errorf("outlets receive %d, want all %d units of rain", out, rain)
+	if math.Abs(out-land) > land*1e-9 {
+		t.Errorf("outlets receive %g, want the land area %g", out, land)
 	}
 }
 
@@ -95,7 +104,7 @@ func TestRivers(t *testing.T) {
 			t.Fatalf("edge %d: neither end flows to the other", e)
 		}
 		if flow != n.Flow[a] || flow < opts.MinFlow {
-			t.Fatalf("edge %d: river flow %d, corner %d flow %d, min %d", e, flow, a, n.Flow[a], opts.MinFlow)
+			t.Fatalf("edge %d: river flow %g, corner %d flow %g, min %g", e, flow, a, n.Flow[a], opts.MinFlow)
 		}
 		if l := tr.Corners[a].Lake; l >= 0 && l == tr.Corners[b].Lake {
 			t.Fatalf("edge %d: river inside lake %d", e, l)
@@ -116,21 +125,25 @@ func TestRivers(t *testing.T) {
 			continue
 		}
 		if n.River[mesh.EdgeBetween(k, c.Downslope)] == 0 {
-			t.Fatalf("corner %d: flow %d but no river", k, n.Flow[k])
+			t.Fatalf("corner %d: flow %g but no river", k, n.Flow[k])
 		}
 	}
 
-	// each lake's outlet carries at least the lake's own rain
+	// each lake's outlet carries at least the rain on the lake
 	for l, lake := range tr.Lakes {
-		if n.Flow[lake.Outlet] <= len(lake.Corners) {
-			t.Errorf("lake %d: outlet flow %d, lake has %d corners", l, n.Flow[lake.Outlet], len(lake.Corners))
+		var area float64
+		for _, i := range lake.Cells {
+			area += mesh.Cells[i].Area()
+		}
+		if n.Flow[lake.Outlet] < area {
+			t.Errorf("lake %d: outlet flow %g, lake area %g", l, n.Flow[lake.Outlet], area)
 		}
 	}
 	t.Logf("%d river edges", count)
 }
 
 func TestMinFlow(t *testing.T) {
-	few, many := generate(t, rivers.Options{MinFlow: 200}), generate(t, rivers.Options{MinFlow: 10})
+	few, many := generate(t, rivers.Options{MinFlow: 20_000}), generate(t, rivers.Options{MinFlow: 1000})
 	count := func(n *rivers.Network) (c int) {
 		for _, f := range n.River {
 			if f > 0 {
@@ -140,7 +153,54 @@ func TestMinFlow(t *testing.T) {
 		return c
 	}
 	if count(few) >= count(many) {
-		t.Errorf("min flow 200 gives %d river edges, 10 gives %d", count(few), count(many))
+		t.Errorf("min flow 20000 gives %d river edges, 1000 gives %d", count(few), count(many))
+	}
+}
+
+// TestDensity checks that the rivers depend on the land, not on the number
+// of cells: meshing the same height map four times as finely must give about
+// the same length of river and the same largest flow.
+func TestDensity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a 40,000 cell mesh")
+	}
+	hm, err := fracture.Generate(fracture.DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	measure := func(cells int) (length, largest float64) {
+		opts := voronoi.DefaultOptions()
+		opts.Cells = cells
+		mesh, err := voronoi.Generate(hm, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tr, err := terrain.Generate(mesh, terrain.DefaultOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, err := rivers.Generate(tr, rivers.DefaultOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for e, flow := range n.River {
+			if flow > 0 {
+				a, b := mesh.Corners[mesh.Edges[e].Corners[0]].Point, mesh.Corners[mesh.Edges[e].Corners[1]].Point
+				length += math.Hypot(b.X-a.X, b.Y-a.Y)
+				largest = max(largest, flow)
+			}
+		}
+		return length, largest
+	}
+	coarseLength, coarseLargest := measure(10_000)
+	fineLength, fineLargest := measure(40_000)
+	t.Logf("10,000 cells: %.0f px of river, largest flow %.0f", coarseLength, coarseLargest)
+	t.Logf("40,000 cells: %.0f px of river, largest flow %.0f", fineLength, fineLargest)
+	if r := fineLength / coarseLength; r < 0.6 || r > 1.6 {
+		t.Errorf("river length changes by a factor of %.2f", r)
+	}
+	if r := fineLargest / coarseLargest; r < 0.6 || r > 1.6 {
+		t.Errorf("largest flow changes by a factor of %.2f", r)
 	}
 }
 
@@ -168,7 +228,9 @@ func TestGenerateRejectsBadOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rivers.Generate(tr, rivers.Options{MinFlow: 0}); err == nil {
-		t.Error("min flow 0: want error, got nil")
+	for _, flow := range []float64{0, -1, math.NaN()} {
+		if _, err := rivers.Generate(tr, rivers.Options{MinFlow: flow}); err == nil {
+			t.Errorf("min flow %g: want error, got nil", flow)
+		}
 	}
 }

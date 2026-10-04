@@ -1,9 +1,11 @@
 // Copyright (c) 2026 Michael D Henderson. All rights reserved.
 
 // Package rivers implements the fourth stage of the map pipeline. It rains
-// one unit of water on every corner that is not ocean, runs the water down
-// the terrain's downslopes, and makes a river of every edge that carries
-// enough of it.
+// on the land, runs the water down the terrain's downslopes, and makes a
+// river of every edge that carries enough of it.
+//
+// Water is measured as the area of land it fell on, in square pixels, so a
+// river's size does not depend on how many cells the mesh has.
 //
 // "Polygonal Map Generation for Games" (section 5) starts rivers at random
 // corners in the mountains. Rain everywhere instead lets the shape of the
@@ -18,14 +20,14 @@ import (
 
 // Options configures the rivers.
 type Options struct {
-	// MinFlow is the least flow, in corners' worth of rain, that an edge
-	// must carry to be a river.
-	MinFlow int
+	// MinFlow is the least flow, in square pixels of land drained, that an
+	// edge must carry to be a river.
+	MinFlow float64
 }
 
 // DefaultOptions returns the options used by the tests.
 func DefaultOptions() Options {
-	return Options{MinFlow: 20}
+	return Options{MinFlow: 2000}
 }
 
 // Network holds the flow of water over a terrain.
@@ -33,32 +35,40 @@ type Network struct {
 	Terrain *terrain.Terrain
 	// Flow is the water passing through each corner: its own rain plus
 	// everything that flows into it. It is 0 for ocean corners.
-	Flow []int
+	Flow []float64
 	// River is the flow along each edge of the mesh that is a river, and 0
 	// for every other edge.
-	River []int
+	River []float64
 }
 
 // Generate runs water over t. The same terrain and options always produce
 // the same network.
 func Generate(t *terrain.Terrain, opts Options) (*Network, error) {
-	if opts.MinFlow < 1 {
-		return nil, fmt.Errorf("rivers: invalid min flow %d", opts.MinFlow)
+	if !(opts.MinFlow > 0) {
+		return nil, fmt.Errorf("rivers: invalid min flow %g", opts.MinFlow)
 	}
 	mesh := t.Mesh
 	n := &Network{
 		Terrain: t,
-		Flow:    make([]int, len(t.Corners)),
-		River:   make([]int, len(mesh.Edges)),
+		Flow:    make([]float64, len(t.Corners)),
+		River:   make([]float64, len(mesh.Edges)),
+	}
+
+	// each land cell shares its area equally among its corners
+	for i, c := range mesh.Cells {
+		if t.Cells[i].Ocean {
+			continue
+		}
+		share := c.Area() / float64(len(c.Corners))
+		for _, k := range c.Corners {
+			n.Flow[k] += share
+		}
 	}
 
 	// count the corners that flow into each corner, then pass the water
 	// down from the corners that nothing flows into
 	upstream := make([]int, len(t.Corners))
-	for k, c := range t.Corners {
-		if !c.Ocean {
-			n.Flow[k] = 1
-		}
+	for _, c := range t.Corners {
 		if c.Downslope >= 0 {
 			upstream[c.Downslope]++
 		}
