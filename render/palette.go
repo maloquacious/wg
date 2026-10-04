@@ -38,6 +38,7 @@ var palette = map[string]color.RGBA{
 // ownColors holds the colors of the biomes that mapgen2 does not have.
 var ownColors = map[string]color.RGBA{
 	"ROCKY_SHORE": rgb(0x8a8478),
+	"CLIFF":       rgb(0x6b6e6a),
 }
 
 func rgb(hex uint32) color.RGBA {

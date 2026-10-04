@@ -66,40 +66,43 @@ func generateWith(t *testing.T, opts biomes.Options) *biomes.Map {
 // TestClassify checks the table, including its zone and moisture boundaries.
 func TestClassify(t *testing.T) {
 	for _, tc := range []struct {
-		ocean, lake, coast bool
-		altitude, moisture float64
-		want               biomes.Biome
+		biomes.Cell
+		want biomes.Biome
 	}{
-		{ocean: true, altitude: 0.9, moisture: 0.9, want: biomes.Ocean},
-		{lake: true, altitude: 0.05, want: biomes.Marsh},
-		{lake: true, altitude: 0.5, want: biomes.Lake},
-		{lake: true, altitude: 0.85, want: biomes.Ice},
-		{lake: true, coast: true, altitude: 0.5, want: biomes.Lake},
-		{coast: true, altitude: 0.04, moisture: 0.9, want: biomes.Beach},
-		{coast: true, altitude: 0.041, moisture: 0, want: biomes.RockyShore},
-		{coast: true, altitude: 0.9, moisture: 0.9, want: biomes.RockyShore},
+		{Cell: biomes.Cell{Ocean: true, Altitude: 0.9, Moisture: 0.9}, want: biomes.Ocean},
+		{Cell: biomes.Cell{Lake: true, Altitude: 0.05}, want: biomes.Marsh},
+		{Cell: biomes.Cell{Lake: true, Altitude: 0.5}, want: biomes.Lake},
+		{Cell: biomes.Cell{Lake: true, Altitude: 0.85}, want: biomes.Ice},
+		{Cell: biomes.Cell{Lake: true, Coast: true, Altitude: 0.5}, want: biomes.Lake},
+		{Cell: biomes.Cell{Coast: true, Altitude: 0.04, Moisture: 0.9}, want: biomes.Beach},
+		{Cell: biomes.Cell{Coast: true, Altitude: 0.041, Moisture: 0}, want: biomes.RockyShore},
+		{Cell: biomes.Cell{Coast: true, Altitude: 0.9, Moisture: 0.9}, want: biomes.RockyShore},
+		{Cell: biomes.Cell{Coast: true, Altitude: 0.5, CoastSlope: 0.0101}, want: biomes.Cliff},
+		{Cell: biomes.Cell{Coast: true, Altitude: 0.5, CoastSlope: 0.01}, want: biomes.RockyShore},
+		{Cell: biomes.Cell{Coast: true, Altitude: 0.04, CoastSlope: 0.5}, want: biomes.Beach},
+		{Cell: biomes.Cell{Altitude: 0.5, Moisture: 0.6, CoastSlope: 0.5}, want: biomes.TemperateDeciduousForest},
 
-		{altitude: 0.81, moisture: 0.51, want: biomes.Snow},
-		{altitude: 0.81, moisture: 0.5, want: biomes.Tundra},
-		{altitude: 0.81, moisture: 0.33, want: biomes.Bare},
-		{altitude: 0.81, moisture: 0.16, want: biomes.Scorched},
+		{Cell: biomes.Cell{Altitude: 0.81, Moisture: 0.51}, want: biomes.Snow},
+		{Cell: biomes.Cell{Altitude: 0.81, Moisture: 0.5}, want: biomes.Tundra},
+		{Cell: biomes.Cell{Altitude: 0.81, Moisture: 0.33}, want: biomes.Bare},
+		{Cell: biomes.Cell{Altitude: 0.81, Moisture: 0.16}, want: biomes.Scorched},
 
-		{altitude: 0.8, moisture: 0.67, want: biomes.Taiga},
-		{altitude: 0.61, moisture: 0.66, want: biomes.Shrubland},
-		{altitude: 0.61, moisture: 0.33, want: biomes.TemperateDesert},
+		{Cell: biomes.Cell{Altitude: 0.8, Moisture: 0.67}, want: biomes.Taiga},
+		{Cell: biomes.Cell{Altitude: 0.61, Moisture: 0.66}, want: biomes.Shrubland},
+		{Cell: biomes.Cell{Altitude: 0.61, Moisture: 0.33}, want: biomes.TemperateDesert},
 
-		{altitude: 0.6, moisture: 0.84, want: biomes.TemperateRainForest},
-		{altitude: 0.31, moisture: 0.83, want: biomes.TemperateDeciduousForest},
-		{altitude: 0.31, moisture: 0.5, want: biomes.Grassland},
-		{altitude: 0.31, moisture: 0.16, want: biomes.TemperateDesert},
+		{Cell: biomes.Cell{Altitude: 0.6, Moisture: 0.84}, want: biomes.TemperateRainForest},
+		{Cell: biomes.Cell{Altitude: 0.31, Moisture: 0.83}, want: biomes.TemperateDeciduousForest},
+		{Cell: biomes.Cell{Altitude: 0.31, Moisture: 0.5}, want: biomes.Grassland},
+		{Cell: biomes.Cell{Altitude: 0.31, Moisture: 0.16}, want: biomes.TemperateDesert},
 
-		{altitude: 0.3, moisture: 0.67, want: biomes.TropicalRainForest},
-		{altitude: 0, moisture: 0.66, want: biomes.TropicalSeasonalForest},
-		{altitude: 0, moisture: 0.33, want: biomes.Grassland},
-		{altitude: 0, moisture: 0.16, want: biomes.SubtropicalDesert},
+		{Cell: biomes.Cell{Altitude: 0.3, Moisture: 0.67}, want: biomes.TropicalRainForest},
+		{Cell: biomes.Cell{Altitude: 0, Moisture: 0.66}, want: biomes.TropicalSeasonalForest},
+		{Cell: biomes.Cell{Altitude: 0, Moisture: 0.33}, want: biomes.Grassland},
+		{Cell: biomes.Cell{Altitude: 0, Moisture: 0.16}, want: biomes.SubtropicalDesert},
 	} {
-		if got := biomes.DefaultOptions().Classify(tc.ocean, tc.lake, tc.coast, tc.altitude, tc.moisture); got != tc.want {
-			t.Errorf("%+v: got %v", tc, got)
+		if got := biomes.DefaultOptions().Classify(tc.Cell); got != tc.want {
+			t.Errorf("%+v: got %v", tc.Cell, got)
 		}
 	}
 }
@@ -116,7 +119,11 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("cell %d: altitude %g", i, a)
 		}
 		top = max(top, a)
-		if want := biomes.DefaultOptions().Classify(c.Ocean, c.Lake >= 0, c.Coast, a, b.Moisture.Cells[i]); b.Cells[i] != want {
+		cell := biomes.Cell{Ocean: c.Ocean, Lake: c.Lake >= 0, Coast: c.Coast, Altitude: a, Moisture: b.Moisture.Cells[i], CoastSlope: b.CoastSlope[i]}
+		if (b.CoastSlope[i] > 0) && !c.Coast {
+			t.Fatalf("cell %d: coast slope %g off the coast", i, b.CoastSlope[i])
+		}
+		if want := biomes.DefaultOptions().Classify(cell); b.Cells[i] != want {
 			t.Fatalf("cell %d: biome %v, want %v", i, b.Cells[i], want)
 		}
 		count[b.Cells[i]]++
@@ -135,7 +142,7 @@ func TestGenerate(t *testing.T) {
 		t.Logf("%-26v %5d cells %5.1f%% of land", biome, count[biome], 100*float64(count[biome])/float64(land))
 	}
 	// the default map has land in every altitude zone
-	for _, biome := range []biomes.Biome{biomes.Beach, biomes.RockyShore, biomes.Grassland, biomes.TropicalRainForest, biomes.TemperateDeciduousForest} {
+	for _, biome := range []biomes.Biome{biomes.Beach, biomes.RockyShore, biomes.Cliff, biomes.Grassland, biomes.TropicalRainForest, biomes.TemperateDeciduousForest} {
 		if count[biome] == 0 {
 			t.Errorf("no %v cells", biome)
 		}
@@ -148,16 +155,18 @@ func TestRockyAltitude(t *testing.T) {
 	var prev *biomes.Map
 	prevRocky := -1
 	for _, th := range []float64{1, 0.08, 0.04, 0.02, 0} {
-		b := generateWith(t, biomes.Options{RockyAltitude: th})
+		opts := biomes.DefaultOptions()
+		opts.RockyAltitude = th
+		b := generateWith(t, opts)
 		var rocky int
 		for i, biome := range b.Cells {
-			if biome == biomes.RockyShore {
+			if biome == biomes.RockyShore || biome == biomes.Cliff {
 				rocky++
 				if b.Altitude[i] <= th {
 					t.Fatalf("threshold %g: cell %d at altitude %g is rocky", th, i, b.Altitude[i])
 				}
 			}
-			if prev != nil && biome != prev.Cells[i] && (prev.Cells[i] != biomes.Beach || biome != biomes.RockyShore) {
+			if prev != nil && biome != prev.Cells[i] && (prev.Cells[i] != biomes.Beach || (biome != biomes.RockyShore && biome != biomes.Cliff)) {
 				t.Fatalf("threshold %g: cell %d changed from %v to %v", th, i, prev.Cells[i], biome)
 			}
 		}
@@ -167,8 +176,40 @@ func TestRockyAltitude(t *testing.T) {
 		if rocky < prevRocky {
 			t.Errorf("threshold %g: %d rocky cells, fewer than the %d at the higher threshold", th, rocky, prevRocky)
 		}
-		t.Logf("threshold %.2f: %d rocky shore cells", th, rocky)
+		t.Logf("threshold %.2f: %d rocky shore or cliff cells", th, rocky)
 		prev, prevRocky = b, rocky
+	}
+}
+
+// TestCliffSlope checks that raising the slope threshold turns cliffs into
+// rocky shore and leaves every other cell alone.
+func TestCliffSlope(t *testing.T) {
+	var prev *biomes.Map
+	prevCliffs := -1
+	for _, th := range []float64{0, 0.005, 0.01, 0.02, 1} {
+		opts := biomes.DefaultOptions()
+		opts.CliffSlope = th
+		b := generateWith(t, opts)
+		var cliffs int
+		for i, biome := range b.Cells {
+			if biome == biomes.Cliff {
+				cliffs++
+				if b.CoastSlope[i] <= th || b.Altitude[i] <= opts.RockyAltitude {
+					t.Fatalf("threshold %g: cell %d with slope %g, altitude %g is a cliff", th, i, b.CoastSlope[i], b.Altitude[i])
+				}
+			}
+			if prev != nil && biome != prev.Cells[i] && (prev.Cells[i] != biomes.Cliff || biome != biomes.RockyShore) {
+				t.Fatalf("threshold %g: cell %d changed from %v to %v", th, i, prev.Cells[i], biome)
+			}
+		}
+		if prevCliffs >= 0 && cliffs > prevCliffs {
+			t.Errorf("threshold %g: %d cliffs, more than the %d at the lower threshold", th, cliffs, prevCliffs)
+		}
+		if th == 1 && cliffs != 0 {
+			t.Errorf("threshold 1: %d cliffs, want none", cliffs)
+		}
+		t.Logf("threshold %.3f: %d cliff cells", th, cliffs)
+		prev, prevCliffs = b, cliffs
 	}
 }
 
@@ -178,8 +219,11 @@ func TestGenerateRejectsBadOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, th := range []float64{-0.1, math.NaN()} {
-		if _, err := biomes.Generate(m, biomes.Options{RockyAltitude: th}); err == nil {
+		if _, err := biomes.Generate(m, biomes.Options{RockyAltitude: th, CliffSlope: 0.01}); err == nil {
 			t.Errorf("rocky altitude %g: want error, got nil", th)
+		}
+		if _, err := biomes.Generate(m, biomes.Options{RockyAltitude: 0.04, CliffSlope: th}); err == nil {
+			t.Errorf("cliff slope %g: want error, got nil", th)
 		}
 	}
 }

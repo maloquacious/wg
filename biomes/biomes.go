@@ -10,12 +10,13 @@
 // sea level (0) to the highest cell (1), so a low world has little snow.
 //
 // mapgen2 makes every land cell next to the ocean a beach. Here only low
-// coastal cells are beaches; the rest, where the land rises quickly from the
-// sea, are rocky shore.
+// coastal cells are beaches. The rest, where the land rises quickly from the
+// sea, are rocky shore, and the steepest of those are cliffs.
 package biomes
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/maloquacious/wg/moisture"
 )
@@ -31,6 +32,7 @@ const (
 	Ice        // a lake at high altitude
 	Beach      // low land next to the ocean
 	RockyShore // higher land next to the ocean
+	Cliff      // rocky shore that drops steeply into the ocean
 	Snow
 	Tundra
 	Bare
@@ -54,6 +56,7 @@ var names = [numBiomes]string{
 	Ice:                      "ICE",
 	Beach:                    "BEACH",
 	RockyShore:               "ROCKY_SHORE",
+	Cliff:                    "CLIFF",
 	Snow:                     "SNOW",
 	Tundra:                   "TUNDRA",
 	Bare:                     "BARE",
@@ -70,7 +73,7 @@ var names = [numBiomes]string{
 }
 
 // String returns the biome's name, such as "TEMPERATE_DESERT". Every biome
-// but ROCKY_SHORE is named as in mapgen2.
+// but ROCKY_SHORE and CLIFF is named as in mapgen2.
 func (b Biome) String() string {
 	if b < numBiomes {
 		return names[b]
@@ -92,11 +95,25 @@ type Options struct {
 	// RockyAltitude is the altitude above which a cell next to the ocean is
 	// rocky shore rather than beach.
 	RockyAltitude float64
+	// CliffSlope is the coast slope, in altitude per pixel, above which
+	// rocky shore is a cliff. 0.01 means a fall of the whole height from
+	// the highest cell to sea level within 100 pixels.
+	CliffSlope float64
 }
 
 // DefaultOptions returns the options used by the tests.
 func DefaultOptions() Options {
-	return Options{RockyAltitude: 0.04}
+	return Options{RockyAltitude: 0.04, CliffSlope: 0.01}
+}
+
+// Cell holds what Classify needs to know about a cell.
+type Cell struct {
+	Ocean, Lake, Coast bool
+	// Altitude and Moisture are in 0...1.
+	Altitude, Moisture float64
+	// CoastSlope is the steepest slope down to an ocean neighbor, in
+	// altitude per pixel. It is 0 for a cell that is not on the coast.
+	CoastSlope float64
 }
 
 // Map holds the biome of every cell.
@@ -105,7 +122,13 @@ type Map struct {
 	// Altitude is each cell's height above sea level, from 0 at sea level to
 	// 1 at the highest cell. It is 0 for ocean cells.
 	Altitude []float64
-	Cells    []Biome
+	// CoastSlope is, for each land cell next to the ocean, the steepest
+	// slope from it down to an ocean neighbor, in altitude per pixel. The
+	// drop counts the depth of the water, measured on the same scale as
+	// altitude, and the distance is between the cells' sites. It is 0 for
+	// every other cell.
+	CoastSlope []float64
+	Cells      []Biome
 }
 
 // Generate assigns the biomes for m. The same moisture map always produces
@@ -113,6 +136,9 @@ type Map struct {
 func Generate(m *moisture.Map, opts Options) (*Map, error) {
 	if !(opts.RockyAltitude >= 0) {
 		return nil, fmt.Errorf("biomes: invalid rocky altitude %g", opts.RockyAltitude)
+	}
+	if !(opts.CliffSlope >= 0) {
+		return nil, fmt.Errorf("biomes: invalid cliff slope %g", opts.CliffSlope)
 	}
 	t := m.Rivers.Terrain
 	sea := max(t.Mesh.SeaLevel, 0)
@@ -122,22 +148,41 @@ func Generate(m *moisture.Map, opts Options) (*Map, error) {
 	}
 
 	b := &Map{
-		Moisture: m,
-		Altitude: make([]float64, len(t.Cells)),
-		Cells:    make([]Biome, len(t.Cells)),
+		Moisture:   m,
+		Altitude:   make([]float64, len(t.Cells)),
+		CoastSlope: make([]float64, len(t.Cells)),
+		Cells:      make([]Biome, len(t.Cells)),
 	}
+	mesh := t.Mesh
 	for i, c := range t.Cells {
 		if !c.Ocean && top > sea {
 			b.Altitude[i] = min(max((c.Elevation-sea)/(top-sea), 0), 1)
 		}
-		b.Cells[i] = opts.Classify(c.Ocean, c.Lake >= 0, c.Coast, b.Altitude[i], m.Cells[i])
+		if c.Coast && top > sea {
+			for _, j := range mesh.Cells[i].Neighbors {
+				if t.Cells[j].Ocean {
+					drop := (c.Elevation - t.Cells[j].Elevation) / (top - sea)
+					p, q := mesh.Cells[i].Site, mesh.Cells[j].Site
+					b.CoastSlope[i] = max(b.CoastSlope[i], drop/math.Hypot(q.X-p.X, q.Y-p.Y))
+				}
+			}
+		}
+		b.Cells[i] = opts.Classify(Cell{
+			Ocean:      c.Ocean,
+			Lake:       c.Lake >= 0,
+			Coast:      c.Coast,
+			Altitude:   b.Altitude[i],
+			Moisture:   m.Cells[i],
+			CoastSlope: b.CoastSlope[i],
+		})
 	}
 	return b, nil
 }
 
 // Classify returns the biome of a cell from mapgen2's table, with coastal
-// cells split into beach and rocky shore. altitude and moisture are in 0...1.
-func (o Options) Classify(ocean, lake, coast bool, altitude, moisture float64) Biome {
+// cells split into beach, rocky shore and cliff.
+func (o Options) Classify(c Cell) Biome {
+	ocean, lake, coast, altitude, moisture := c.Ocean, c.Lake, c.Coast, c.Altitude, c.Moisture
 	switch {
 	case ocean:
 		return Ocean
@@ -149,6 +194,8 @@ func (o Options) Classify(ocean, lake, coast bool, altitude, moisture float64) B
 			return Ice
 		}
 		return Lake
+	case coast && altitude > o.RockyAltitude && c.CoastSlope > o.CliffSlope:
+		return Cliff
 	case coast && altitude > o.RockyAltitude:
 		return RockyShore
 	case coast:
