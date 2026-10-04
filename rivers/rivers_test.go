@@ -158,19 +158,20 @@ func TestMinFlow(t *testing.T) {
 }
 
 // TestDensity checks that the rivers depend on the land, not on the number
-// of cells: meshing the same height map four times as finely must give about
-// the same length of river and the same largest flow.
+// of cells: meshing the same height map with cells half as wide (four times
+// as many) must give about the same length of river and the same largest
+// flow.
 func TestDensity(t *testing.T) {
 	if testing.Short() {
-		t.Skip("builds a 40,000 cell mesh")
+		t.Skip("builds a 42,000 cell mesh")
 	}
 	hm, err := fracture.Generate(fracture.DefaultOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
-	measure := func(cells int) (length, largest float64) {
+	measure := func(size float64) (length, largest float64) {
 		opts := voronoi.DefaultOptions()
-		opts.Cells = cells
+		opts.CellSize = size
 		mesh, err := voronoi.Generate(hm, opts)
 		if err != nil {
 			t.Fatal(err)
@@ -192,10 +193,10 @@ func TestDensity(t *testing.T) {
 		}
 		return length, largest
 	}
-	coarseLength, coarseLargest := measure(10_000)
-	fineLength, fineLargest := measure(40_000)
-	t.Logf("10,000 cells: %.0f px of river, largest flow %.0f", coarseLength, coarseLargest)
-	t.Logf("40,000 cells: %.0f px of river, largest flow %.0f", fineLength, fineLargest)
+	coarseLength, coarseLargest := measure(14)
+	fineLength, fineLargest := measure(7)
+	t.Logf("14 px cells: %.0f px of river, largest flow %.0f", coarseLength, coarseLargest)
+	t.Logf(" 7 px cells: %.0f px of river, largest flow %.0f", fineLength, fineLargest)
 	if r := fineLength / coarseLength; r < 0.6 || r > 1.6 {
 		t.Errorf("river length changes by a factor of %.2f", r)
 	}

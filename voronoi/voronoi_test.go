@@ -26,6 +26,11 @@ var defaultMap = sync.OnceValues(func() (*heightmap.Map, error) {
 	return fracture.Generate(fracture.DefaultOptions())
 })
 
+// sizeFor returns the cell size that gives hm exactly n cells.
+func sizeFor(hm *heightmap.Map, n int) float64 {
+	return math.Sqrt(float64(hm.Width*hm.Height) / float64(n))
+}
+
 func defaultMesh(t *testing.T) *voronoi.Mesh {
 	t.Helper()
 	hm, err := defaultMap()
@@ -42,8 +47,8 @@ func defaultMesh(t *testing.T) *voronoi.Mesh {
 func TestMeshCoversMap(t *testing.T) {
 	mesh := defaultMesh(t)
 	opts := voronoi.DefaultOptions()
-	if len(mesh.Cells) != opts.Cells {
-		t.Fatalf("cells: want %d, got %d", opts.Cells, len(mesh.Cells))
+	if want := opts.CellCount(mesh.Width, mesh.Height); len(mesh.Cells) != want {
+		t.Fatalf("cells: want %d, got %d", want, len(mesh.Cells))
 	}
 	if mesh.Width != 1920 || mesh.Height != 1080 {
 		t.Errorf("size: want 1920x1080, got %dx%d", mesh.Width, mesh.Height)
@@ -109,9 +114,12 @@ func TestGraph(t *testing.T) {
 	}
 	for _, cells := range []int{3, 4, 5, 10, 100} {
 		for seed := range uint64(20) {
-			mesh, err := voronoi.Generate(hm, voronoi.Options{Cells: cells, OceanPercent: 70, Seed: seed})
+			mesh, err := voronoi.Generate(hm, voronoi.Options{CellSize: sizeFor(hm, cells), OceanPercent: 70, Seed: seed})
 			if err != nil {
 				t.Fatalf("%d cells, seed %d: %v", cells, seed, err)
+			}
+			if len(mesh.Cells) != cells {
+				t.Fatalf("%d cells, seed %d: got %d cells", cells, seed, len(mesh.Cells))
 			}
 			checkGraph(t, mesh)
 		}
@@ -232,7 +240,7 @@ func TestOcean(t *testing.T) {
 				t.Errorf("%d%%: land cell %d is below sea level", pct, i)
 			}
 		}
-		if want := opts.Cells * pct / 100; ocean != want {
+		if want := len(mesh.Cells) * pct / 100; ocean != want {
 			t.Errorf("%d%%: want %d ocean cells, got %d", pct, want, ocean)
 		}
 		if pct == 0 && mesh.SeaLevel != -1 {
@@ -249,7 +257,7 @@ func TestElevationMatchesNearestSite(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts := voronoi.DefaultOptions()
-	opts.Cells = 50
+	opts.CellSize = sizeFor(hm, 50)
 	mesh, err := voronoi.Generate(hm, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -295,9 +303,12 @@ func TestGenerateRejectsBadOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, opts := range []voronoi.Options{
-		{Cells: 2, OceanPercent: 70},
-		{Cells: 100, OceanPercent: -1},
-		{Cells: 100, OceanPercent: 101},
+		{CellSize: 0, OceanPercent: 70},
+		{CellSize: -14, OceanPercent: 70},
+		{CellSize: math.NaN(), OceanPercent: 70},
+		{CellSize: 2000, OceanPercent: 70}, // fewer than 3 cells
+		{CellSize: 14, OceanPercent: -1},
+		{CellSize: 14, OceanPercent: 101},
 	} {
 		if _, err := voronoi.Generate(hm, opts); err == nil {
 			t.Errorf("%+v: want error, got nil", opts)

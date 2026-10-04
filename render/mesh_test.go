@@ -3,6 +3,7 @@
 package render_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/maloquacious/wg/fracture"
@@ -16,7 +17,7 @@ func TestMesh(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts := voronoi.DefaultOptions()
-	opts.Cells = 200
+	opts.CellSize = math.Sqrt(float64(hm.Width*hm.Height) / 200)
 	mesh, err := voronoi.Generate(hm, opts)
 	if err != nil {
 		t.Fatal(err)

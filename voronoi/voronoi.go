@@ -22,15 +22,25 @@ import (
 
 // Options configures the mesh.
 type Options struct {
-	Cells        int    // number of cells in the mesh
+	// CellSize is the mean width of a cell in pixels: each cell covers
+	// CellSize² square pixels on average. A cell's elevation is the mean of
+	// the pixels in it, so the size, not the count, sets how much of the
+	// height map each cell smooths over.
+	CellSize     float64
 	OceanPercent int    // percentage of cells, 0...100, that are ocean
 	Seed         uint64 // seed for the random number generator
+}
+
+// CellCount returns the number of cells that the options give a width x
+// height map.
+func (o Options) CellCount(width, height int) int {
+	return int(math.Round(float64(width) * float64(height) / (o.CellSize * o.CellSize)))
 }
 
 // DefaultOptions returns the options used by the tests.
 func DefaultOptions() Options {
 	return Options{
-		Cells:        10_000,
+		CellSize:     14,
 		OceanPercent: 70,
 		Seed:         0x0123456789abcdef,
 	}
@@ -120,8 +130,12 @@ func (m *Mesh) EdgeBetween(a, b int) int {
 // Generate lays a mesh over hm. The same map and options always produce the
 // same mesh.
 func Generate(hm *heightmap.Map, opts Options) (*Mesh, error) {
-	if opts.Cells < 3 {
-		return nil, fmt.Errorf("voronoi: invalid cells %d", opts.Cells)
+	if !(opts.CellSize > 0) {
+		return nil, fmt.Errorf("voronoi: invalid cell size %g", opts.CellSize)
+	}
+	cellCount := opts.CellCount(hm.Width, hm.Height)
+	if cellCount < 3 {
+		return nil, fmt.Errorf("voronoi: cell size %g leaves %d cells, want at least 3", opts.CellSize, cellCount)
 	}
 	if opts.OceanPercent < 0 || opts.OceanPercent > 100 {
 		return nil, fmt.Errorf("voronoi: invalid ocean percent %d", opts.OceanPercent)
@@ -129,7 +143,7 @@ func Generate(hm *heightmap.Map, opts Options) (*Mesh, error) {
 	rnd := rand.New(rand.NewPCG(opts.Seed, opts.Seed))
 	width, height := float64(hm.Width), float64(hm.Height)
 
-	sites := make([]delaunay.Point, opts.Cells)
+	sites := make([]delaunay.Point, cellCount)
 	for i := range sites {
 		sites[i] = delaunay.Point{X: rnd.Float64() * width, Y: rnd.Float64() * height}
 	}

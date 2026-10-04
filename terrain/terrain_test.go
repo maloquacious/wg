@@ -110,7 +110,7 @@ func TestCrater(t *testing.T) {
 			hm.Data[y*size+x] = max(e, 0)
 		}
 	}
-	mesh, err := voronoi.Generate(hm, voronoi.Options{Cells: 400, OceanPercent: 20, Seed: 1})
+	mesh, err := voronoi.Generate(hm, voronoi.Options{CellSize: 10, OceanPercent: 20, Seed: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
