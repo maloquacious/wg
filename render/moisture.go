@@ -4,7 +4,6 @@ package render
 
 import (
 	"image"
-	"image/color"
 
 	"github.com/maloquacious/wg/moisture"
 )
@@ -23,8 +22,8 @@ func DefaultMoistureOptions() MoistureOptions {
 // The moisture ramp runs from the SUBTROPICAL_DESERT to the
 // TROPICAL_RAIN_FOREST colors of the Red Blob Games mapgen2 palette.
 var (
-	dryColor = color.RGBA{R: 0xd2, G: 0xb9, B: 0x8b, A: 255}
-	wetColor = color.RGBA{R: 0x33, G: 0x77, B: 0x55, A: 255}
+	dryColor = palette["SUBTROPICAL_DESERT"]
+	wetColor = palette["TROPICAL_RAIN_FOREST"]
 )
 
 // Moisture renders the moisture of the land cells on a ramp from dry to wet,

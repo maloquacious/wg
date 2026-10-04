@@ -26,7 +26,7 @@ func DefaultRiversOptions() RiversOptions {
 }
 
 // riverColor is the RIVER color from the Red Blob Games mapgen2 palette.
-var riverColor = color.RGBA{R: 0x22, G: 0x55, B: 0x88, A: 255}
+var riverColor = palette["RIVER"]
 
 // Rivers renders the terrain under the network, without drainage lines, and
 // draws each river with a width that grows with the square root of its flow.

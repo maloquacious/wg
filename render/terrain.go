@@ -25,7 +25,7 @@ func DefaultTerrainOptions() TerrainOptions {
 }
 
 // lakeColor is the LAKE color from the Red Blob Games mapgen2 palette.
-var lakeColor = color.RGBA{R: 0x33, G: 0x66, B: 0x99, A: 255}
+var lakeColor = palette["LAKE"]
 
 // Terrain renders the cells of a terrain like Mesh, with lakes, coastlines
 // and lake shores, and optionally the drainage between corners.
