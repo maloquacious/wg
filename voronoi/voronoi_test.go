@@ -3,15 +3,23 @@
 package voronoi_test
 
 import (
+	"flag"
 	"math"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
 
 	"github.com/maloquacious/wg/fracture"
 	"github.com/maloquacious/wg/heightmap"
+	"github.com/maloquacious/wg/render"
 	"github.com/maloquacious/wg/voronoi"
 )
+
+// renderDir enables writing the test meshes as images, for example
+//
+//	go test ./voronoi -render=../var
+var renderDir = flag.String("render", "", "write rendered meshes to this directory")
 
 // defaultMap is the stage 1 map built from the default options.
 var defaultMap = sync.OnceValues(func() (*heightmap.Map, error) {
@@ -61,6 +69,17 @@ func TestMeshCoversMap(t *testing.T) {
 	if want := float64(mesh.Width * mesh.Height); math.Abs(total-want) > want*1e-9 {
 		t.Errorf("area: want %g, got %g", want, total)
 	}
+}
+
+func TestRender(t *testing.T) {
+	if *renderDir == "" {
+		t.Skip("set -render to write the mesh image")
+	}
+	path := filepath.Join(*renderDir, "voronoi-mesh.png")
+	if err := render.WritePNG(path, render.Mesh(defaultMesh(t), render.DefaultMeshOptions())); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("wrote %s", path)
 }
 
 func TestNeighborsAreSymmetric(t *testing.T) {
