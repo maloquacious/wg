@@ -12,6 +12,8 @@ import (
 
 // TerrainOptions configures Terrain.
 type TerrainOptions struct {
+	// Borders draws the outline of every cell, as Mesh does.
+	Borders bool
 	// Drainage draws a line from every land corner to the corner downhill
 	// of it.
 	Drainage bool
@@ -39,8 +41,9 @@ func Terrain(t *terrain.Terrain, opts TerrainOptions) *image.RGBA {
 	owner := owners(mesh)
 	img := paint(owner, colors, width, height)
 
-	// outline the ocean and the lakes
+	// outline the ocean and the lakes, and the cells if asked
 	shore := color.RGBA{R: 40, G: 60, B: 90, A: 255}
+	border := color.RGBA{R: 50, G: 40, B: 30, A: 255}
 	for y := range height {
 		for x := range width {
 			i := owner[y*width+x]
@@ -50,8 +53,15 @@ func Terrain(t *terrain.Terrain, opts TerrainOptions) *image.RGBA {
 					continue
 				}
 				j := owner[py*width+px]
+				if i == j {
+					continue
+				}
 				if t.Cells[i].Ocean != t.Cells[j].Ocean || (t.Cells[i].Lake >= 0) != (t.Cells[j].Lake >= 0) {
 					img.SetRGBA(x, y, shore)
+					break
+				}
+				if opts.Borders {
+					img.SetRGBA(x, y, blend(img.RGBAAt(x, y), border, 0.35))
 					break
 				}
 			}

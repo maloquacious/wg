@@ -208,12 +208,16 @@ func TestRender(t *testing.T) {
 	if *renderDir == "" {
 		t.Skip("set -render to write the rivers image")
 	}
-	path := filepath.Join(*renderDir, "rivers.png")
-	img := render.Rivers(generate(t, rivers.DefaultOptions()), render.DefaultRiversOptions())
-	if err := render.WritePNG(path, img); err != nil {
-		t.Fatal(err)
+	n := generate(t, rivers.DefaultOptions())
+	for name, borders := range map[string]bool{"rivers.png": false, "rivers-mesh.png": true} {
+		opts := render.DefaultRiversOptions()
+		opts.Borders = borders
+		path := filepath.Join(*renderDir, name)
+		if err := render.WritePNG(path, render.Rivers(n, opts)); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("wrote %s", path)
 	}
-	t.Logf("wrote %s", path)
 }
 
 func TestGenerateIsDeterministic(t *testing.T) {

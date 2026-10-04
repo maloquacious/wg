@@ -16,7 +16,7 @@ go test ./voronoi -run TestNeighborsAreSymmetric   # one test
 go test ./fracture -run 'TestGenerate$' -render=../var   # var/fracture-topo.png
 go test ./voronoi -run TestRender -render=../var         # var/voronoi-mesh.png
 go test ./terrain -run TestRender -render=../var         # var/terrain.png
-go test ./rivers -run TestRender -render=../var          # var/rivers.png
+go test ./rivers -run TestRender -render=../var          # var/rivers.png, var/rivers-mesh.png (with cell borders)
 ```
 
 The `-render` flag is defined in the `fracture`, `voronoi`, `terrain` and `rivers` test files. Every `TestRender` except `fracture`'s skips without it.

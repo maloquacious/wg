@@ -16,6 +16,8 @@ type RiversOptions struct {
 	// flow, which is an area in square pixels, and never less than one
 	// pixel.
 	Scale float64
+	// Borders draws the outline of every cell under the rivers.
+	Borders bool
 }
 
 // DefaultRiversOptions returns the options used by the tests.
@@ -29,7 +31,7 @@ var riverColor = color.RGBA{R: 0x22, G: 0x55, B: 0x88, A: 255}
 // Rivers renders the terrain under the network, without drainage lines, and
 // draws each river with a width that grows with the square root of its flow.
 func Rivers(n *rivers.Network, opts RiversOptions) *image.RGBA {
-	img := Terrain(n.Terrain, TerrainOptions{})
+	img := Terrain(n.Terrain, TerrainOptions{Borders: opts.Borders})
 	mesh := n.Terrain.Mesh
 	for e, flow := range n.River {
 		if flow == 0 {
