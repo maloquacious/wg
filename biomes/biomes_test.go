@@ -81,6 +81,7 @@ func TestClassify(t *testing.T) {
 		{Cell: biomes.Cell{Coast: true, Altitude: 0.5, CoastSlope: 0.01}, want: biomes.RockyShore},
 		{Cell: biomes.Cell{Coast: true, Altitude: 0.04, CoastSlope: 0.5}, want: biomes.Beach},
 		{Cell: biomes.Cell{Altitude: 0.5, Moisture: 0.6, CoastSlope: 0.5}, want: biomes.TemperateDeciduousForest},
+		{Cell: biomes.Cell{Altitude: 0.5, Moisture: 0.6, Border: true}, want: biomes.TemperateDeciduousForest}, // BorderCliffs is off
 
 		{Cell: biomes.Cell{Altitude: 0.81, Moisture: 0.51}, want: biomes.Snow},
 		{Cell: biomes.Cell{Altitude: 0.81, Moisture: 0.5}, want: biomes.Tundra},
@@ -146,6 +147,52 @@ func TestGenerate(t *testing.T) {
 		if count[biome] == 0 {
 			t.Errorf("no %v cells", biome)
 		}
+	}
+}
+
+// TestBorderCliffs checks that BorderCliffs turns every land cell on the
+// edge of the map into cliff and changes nothing else.
+func TestBorderCliffs(t *testing.T) {
+	off := generate(t)
+	opts := biomes.DefaultOptions()
+	opts.BorderCliffs = true
+	on := generateWith(t, opts)
+	mesh := on.Moisture.Rivers.Terrain.Mesh
+	tr := on.Moisture.Rivers.Terrain
+
+	var border int
+	for i, c := range mesh.Cells {
+		touches := slices.ContainsFunc(c.Corners, func(k int) bool { return mesh.Corners[k].Border })
+		switch {
+		case touches && !tr.Cells[i].Ocean:
+			border++
+			if on.Cells[i] != biomes.Cliff {
+				t.Fatalf("cell %d: on the border but %v", i, on.Cells[i])
+			}
+		case on.Cells[i] != off.Cells[i]:
+			t.Fatalf("cell %d: changed from %v to %v but is not land on the border", i, off.Cells[i], on.Cells[i])
+		}
+	}
+	if border == 0 {
+		t.Fatal("no land touches the border of the default map")
+	}
+	t.Logf("%d land cells on the border became cliff", border)
+
+	// the rule also holds for a single cell
+	for _, cell := range []biomes.Cell{
+		{Border: true, Altitude: 0.9, Moisture: 0.9},
+		{Border: true, Coast: true},
+		{Border: true},
+	} {
+		if got := opts.Classify(cell); got != biomes.Cliff {
+			t.Errorf("%+v: got %v, want CLIFF", cell, got)
+		}
+	}
+	if got := opts.Classify(biomes.Cell{Border: true, Ocean: true}); got != biomes.Ocean {
+		t.Errorf("ocean on the border: got %v", got)
+	}
+	if got := opts.Classify(biomes.Cell{Border: true, Lake: true, Altitude: 0.5}); got != biomes.Lake {
+		t.Errorf("lake on the border: got %v", got)
 	}
 }
 

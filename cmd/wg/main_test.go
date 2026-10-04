@@ -23,7 +23,7 @@ var small = []string{"-width", "320", "-height", "180", "-rounds", "200"}
 func TestRunWritesRenders(t *testing.T) {
 	dir := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	args := append(slices.Clone(small), "-render", "all", "-out", dir, "-name", "test", "-stats", "-borders")
+	args := append(slices.Clone(small), "-render", "all", "-out", dir, "-name", "test", "-stats", "-borders", "-border-cliffs")
 	if err := run(args, &stdout, &stderr); err != nil {
 		t.Fatalf("run: %v\n%s", err, stderr.String())
 	}

@@ -17,6 +17,7 @@ package biomes
 import (
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/maloquacious/wg/moisture"
 )
@@ -99,6 +100,10 @@ type Options struct {
 	// rocky shore is a cliff. 0.01 means a fall of the whole height from
 	// the highest cell to sea level within 100 pixels.
 	CliffSlope float64
+	// BorderCliffs makes every land cell that touches the edge of the map
+	// a cliff, so that the map's land ends in a wall rather than running
+	// off the edge.
+	BorderCliffs bool
 }
 
 // DefaultOptions returns the options used by the tests.
@@ -114,6 +119,8 @@ type Cell struct {
 	// CoastSlope is the steepest slope down to an ocean neighbor, in
 	// altitude per pixel. It is 0 for a cell that is not on the coast.
 	CoastSlope float64
+	// Border is true when the cell touches the edge of the map.
+	Border bool
 }
 
 // Map holds the biome of every cell.
@@ -174,18 +181,22 @@ func Generate(m *moisture.Map, opts Options) (*Map, error) {
 			Altitude:   b.Altitude[i],
 			Moisture:   m.Cells[i],
 			CoastSlope: b.CoastSlope[i],
+			Border:     slices.ContainsFunc(mesh.Cells[i].Corners, func(k int) bool { return mesh.Corners[k].Border }),
 		})
 	}
 	return b, nil
 }
 
 // Classify returns the biome of a cell from mapgen2's table, with coastal
-// cells split into beach, rocky shore and cliff.
+// cells split into beach, rocky shore and cliff, and, with BorderCliffs,
+// land on the edge of the map made cliff.
 func (o Options) Classify(c Cell) Biome {
 	ocean, lake, coast, altitude, moisture := c.Ocean, c.Lake, c.Coast, c.Altitude, c.Moisture
 	switch {
 	case ocean:
 		return Ocean
+	case o.BorderCliffs && c.Border && !lake:
+		return Cliff
 	case lake:
 		switch {
 		case altitude < 0.1:
