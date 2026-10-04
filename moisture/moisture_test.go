@@ -4,6 +4,7 @@ package moisture_test
 
 import (
 	"flag"
+	"fmt"
 	"math"
 	"path/filepath"
 	"slices"
@@ -82,20 +83,29 @@ func TestEvenlySpread(t *testing.T) {
 	}
 }
 
-// TestNoDryHollows checks that wetness only spreads out from fresh water,
-// over land: every land corner that fresh water reaches without crossing the
-// sea, and is not itself on fresh water, has a wetter neighbor; and every
-// corner that fresh water cannot reach is drier than all that it can.
+// TestNoDryHollows checks that wetness only spreads out from its sources,
+// over land: every land corner that a source reaches without crossing the
+// sea, and is not itself a source, has a wetter neighbor; and every corner
+// that no source can reach is drier than all that one can. With the sea
+// turned off, only fresh water is a source.
 func TestNoDryHollows(t *testing.T) {
-	m := generate(t, moisture.DefaultOptions())
+	for _, opts := range []moisture.Options{moisture.DefaultOptions(), {Spread: 100, SeaStrength: 0}} {
+		t.Run(fmt.Sprintf("sea %g", opts.SeaStrength), func(t *testing.T) {
+			checkNoDryHollows(t, generate(t, opts), opts.SeaStrength > 0)
+		})
+	}
+}
+
+func checkNoDryHollows(t *testing.T, m *moisture.Map, sea bool) {
 	n := m.Rivers
 	tr, mesh := n.Terrain, n.Terrain.Mesh
+	source := func(k int) bool { return freshWater(n, k) || (sea && tr.Corners[k].Coast) }
 
-	// the corners that fresh water reaches over land and coast corners
+	// the corners that a source reaches over land and coast corners
 	reached := make([]bool, len(tr.Corners))
 	var stack []int
 	for k := range tr.Corners {
-		if !tr.Corners[k].Ocean && freshWater(n, k) {
+		if !tr.Corners[k].Ocean && source(k) {
 			reached[k] = true
 			stack = append(stack, k)
 		}
@@ -137,7 +147,11 @@ func TestNoDryHollows(t *testing.T) {
 	if wettestDry >= driestReached {
 		t.Errorf("land fresh water cannot reach has moisture up to %g, above reached land at %g", wettestDry, driestReached)
 	}
-	t.Logf("unreached land: moisture up to %.3f", wettestDry)
+	if wettestDry < 0 {
+		t.Log("every land corner is reached")
+	} else {
+		t.Logf("unreached land: moisture up to %.3f", wettestDry)
+	}
 	mean := func(v []float64) (s float64) {
 		for _, x := range v {
 			s += x
@@ -207,6 +221,54 @@ func TestBigRiversReachFurther(t *testing.T) {
 	}
 }
 
+// TestSeaWetsTheCoast checks that the sea makes the land just behind the
+// coast wetter and leaves the driest land inland.
+func TestSeaWetsTheCoast(t *testing.T) {
+	without := generate(t, moisture.Options{Spread: 100, SeaStrength: 0})
+	with := generate(t, moisture.DefaultOptions())
+	tr, mesh := with.Rivers.Terrain, with.Rivers.Terrain.Mesh
+
+	// steps from each cell to the nearest ocean cell
+	steps := make([]int, len(mesh.Cells))
+	var queue []int
+	for i := range steps {
+		steps[i] = -1
+		if tr.Cells[i].Ocean {
+			steps[i] = 0
+			queue = append(queue, i)
+		}
+	}
+	for len(queue) > 0 {
+		i := queue[0]
+		queue = queue[1:]
+		for _, j := range mesh.Cells[i].Neighbors {
+			if steps[j] < 0 {
+				steps[j] = steps[i] + 1
+				queue = append(queue, j)
+			}
+		}
+	}
+	mean := func(m *moisture.Map, near bool) float64 {
+		var sum float64
+		var n int
+		for i, s := range steps {
+			if (near && s == 2) || (!near && s >= 5) {
+				sum += m.Cells[i]
+				n++
+			}
+		}
+		return sum / float64(n)
+	}
+	t.Logf("behind the coast: %.2f without the sea, %.2f with it", mean(without, true), mean(with, true))
+	t.Logf("deep inland:      %.2f without the sea, %.2f with it", mean(without, false), mean(with, false))
+	if mean(with, true) <= mean(without, true)+0.1 {
+		t.Errorf("the sea does not wet the land behind the coast")
+	}
+	if mean(with, false) >= mean(with, true) {
+		t.Errorf("deep inland is not drier than behind the coast")
+	}
+}
+
 func TestRender(t *testing.T) {
 	if *renderDir == "" {
 		t.Skip("set -render to write the moisture image")
@@ -233,6 +295,11 @@ func TestGenerateRejectsBadOptions(t *testing.T) {
 	for _, spread := range []float64{0, -1, math.NaN(), math.Inf(1)} {
 		if _, err := moisture.Generate(n, moisture.Options{Spread: spread}); err == nil {
 			t.Errorf("spread %g: want error, got nil", spread)
+		}
+	}
+	for _, sea := range []float64{-1, 3.5, math.NaN()} {
+		if _, err := moisture.Generate(n, moisture.Options{Spread: 100, SeaStrength: sea}); err == nil {
+			t.Errorf("sea strength %g: want error, got nil", sea)
 		}
 	}
 }

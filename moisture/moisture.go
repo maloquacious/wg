@@ -8,12 +8,14 @@
 //   - Rivers and lakes are the sources. A lake corner has strength 1 and a
 //     river corner has strength flow/MinFlow, up to 3, so large rivers wet
 //     more land than small ones.
+//   - The sea is a weaker source: every coast corner has strength
+//     SeaStrength. Without it, an island with no rivers or lakes would be
+//     the driest land on the map. mapgen2 has no sea source.
 //   - Wetness falls by a factor of e every Spread pixels along the corner
 //     graph, so a corner's wetness is strength·exp(-distance/Spread) from
 //     its best source. It spreads over land and coast corners only, never
 //     across the sea.
-//   - Land that no fresh water reaches, such as an island without rivers or
-//     lakes, is the driest.
+//   - Land that no source reaches is the driest.
 //   - The land corners are ranked by wetness and given evenly spaced values
 //     from 0 (driest) to 1 (wettest). Ocean and coast corners are 1.
 //   - A cell's moisture is the mean of its corners.
@@ -37,11 +39,14 @@ type Options struct {
 	// of e. Ranking makes the land's moisture depend only on its order, so
 	// Spread matters only in weighing large rivers against near ones.
 	Spread float64
+	// SeaStrength is the strength of the coast as a source, where a lake
+	// is 1. Zero turns the sea off as a source.
+	SeaStrength float64
 }
 
 // DefaultOptions returns the options used by the tests.
 func DefaultOptions() Options {
-	return Options{Spread: 100}
+	return Options{Spread: 100, SeaStrength: 2}
 }
 
 // maxStrength caps how much wetter than a lake the largest rivers are.
@@ -60,6 +65,9 @@ func Generate(n *rivers.Network, opts Options) (*Map, error) {
 	if !(opts.Spread > 0) || math.IsInf(opts.Spread, 1) {
 		return nil, fmt.Errorf("moisture: invalid spread %g", opts.Spread)
 	}
+	if !(opts.SeaStrength >= 0) || opts.SeaStrength > maxStrength {
+		return nil, fmt.Errorf("moisture: invalid sea strength %g", opts.SeaStrength)
+	}
 	t := n.Terrain
 	mesh := t.Mesh
 
@@ -72,8 +80,11 @@ func Generate(n *rivers.Network, opts Options) (*Map, error) {
 	q := &queue{}
 	for k, c := range t.Corners {
 		strength := 0.0
+		if c.Coast {
+			strength = opts.SeaStrength
+		}
 		if c.Lake >= 0 {
-			strength = 1
+			strength = max(strength, 1)
 		}
 		if slices.ContainsFunc(mesh.Corners[k].Edges, func(e int) bool { return n.River[e] > 0 }) {
 			strength = max(strength, min(maxStrength, n.Flow[k]/n.MinFlow))
