@@ -3,12 +3,20 @@
 package fracture_test
 
 import (
+	"flag"
 	"math/rand/v2"
+	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/maloquacious/wg/fracture"
+	"github.com/maloquacious/wg/render"
 )
+
+// renderDir enables writing the test maps as images, for example
+//
+//	go test ./fracture -render=/tmp/maps
+var renderDir = flag.String("render", "", "write rendered maps to this directory")
 
 func TestDefaultOptions(t *testing.T) {
 	opts := fracture.DefaultOptions()
@@ -34,6 +42,13 @@ func TestGenerate(t *testing.T) {
 	}
 	if lo, hi := slices.Min(hm.Data), slices.Max(hm.Data); lo != 0 || hi != 1 {
 		t.Errorf("range: want 0...1, got %g...%g", lo, hi)
+	}
+	if *renderDir != "" {
+		path := filepath.Join(*renderDir, "fracture-topo.png")
+		if err := render.WritePNG(path, render.Topo(hm, render.DefaultTopoOptions())); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("wrote %s", path)
 	}
 
 	again, err := fracture.Generate(opts)
