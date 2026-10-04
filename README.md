@@ -98,6 +98,15 @@ wg -border-cliffs
 
 ![The example map with gray cliffs wherever land meets the edge of the map](docs/walled-biomes.png)
 
+Draw Red Blob Games' hand-drawn icons in the biomes image: waves, mountains,
+trees, grass, cacti and reeds. Which drawing each cell gets follows the seed.
+
+```sh
+wg -icons
+```
+
+![The example map with a small hand-drawn icon in every cell](docs/icons-biomes.png)
+
 Show the cells, for example to check their size before choosing a map:
 
 ```sh
@@ -125,6 +134,7 @@ wg -width 960 -height 540 -ocean 52 -render topo,rivers,biomes -out docs -name e
 wg -width 960 -height 540 -ocean 52 -render mesh -borders -out docs -name example
 wg -width 960 -height 540 -ocean 52 -skew 2 -render biomes -out docs -name arid
 wg -width 960 -height 540 -ocean 52 -border-cliffs -render biomes -out docs -name walled
+wg -width 960 -height 540 -ocean 52 -icons -render biomes -out docs -name icons
 ```
 
 | `topo` | `mesh -borders` |
@@ -152,6 +162,7 @@ wg -width 960 -height 540 -ocean 52 -border-cliffs -render biomes -out docs -nam
 | `-cliff` | `0.01` | Rocky shore steeper than this is cliff. |
 | `-border-cliffs` | off | Turn all land touching the edge of the map into cliff. |
 | `-render` | `biomes` | Images to write. |
+| `-icons` | off | Draw a hand-drawn icon in each cell of the `biomes` image. |
 | `-borders` | off | Outline every cell in the `mesh`, `terrain`, `rivers` and `biomes` images. |
 | `-out` | `.` | Directory for the images. |
 | `-name` | `map` | File name prefix. |
@@ -194,8 +205,10 @@ result for the same input.
   [mdhender/vetopo](https://github.com/mdhender/vetopo).
 - Biome colors are from Red Blob Games' mapgen2 palette, Copyright 2017 Red
   Blob Games, under the Apache License 2.0. See `resources/`.
-- `resources/map-icons.svg` is by Red Blob Games, under the Creative Commons
-  Attribution 4.0 International License.
+- The map icons that `-icons` draws, `resources/map-icons.svg`, are by
+  [Red Blob Games](https://www.redblobgames.com/maps/mapgen2/map-icons.html),
+  under the Creative Commons Attribution 4.0 International License. Credit
+  Red Blob Games when you share a map drawn with them.
 
 ## License
 

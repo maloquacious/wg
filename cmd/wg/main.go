@@ -60,6 +60,7 @@ type config struct {
 	landCells int
 	render    []string
 	borders   bool
+	icons     bool
 	out       string
 	name      string
 	stats     bool
@@ -101,6 +102,7 @@ func parse(args []string, stderr io.Writer) (*config, error) {
 	fs.BoolVar(&c.biomes.BorderCliffs, "border-cliffs", c.biomes.BorderCliffs, "make all land that touches the edge of the map cliff")
 	renderList := fs.String("render", "biomes", "comma-separated images to write: "+strings.Join(renders, ", ")+", all or none")
 	fs.BoolVar(&c.borders, "borders", false, "outline every cell in the mesh, terrain, rivers and biomes images")
+	fs.BoolVar(&c.icons, "icons", false, "draw Red Blob Games' hand-drawn biome icons in the biomes image")
 	fs.StringVar(&c.out, "out", ".", "directory to write the images to")
 	fs.StringVar(&c.name, "name", "map", "file name prefix, as in map-biomes.png")
 	fs.BoolVar(&c.stats, "stats", false, "print the number of cells in each biome")
@@ -245,6 +247,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		case "biomes":
 			opts := render.DefaultBiomesOptions()
 			opts.Borders = c.borders
+			opts.Icons = c.icons
+			opts.Seed = c.fracture.Seed
 			img = render.Biomes(bm, opts)
 		}
 		path := filepath.Join(c.out, c.name+"-"+r+".png")

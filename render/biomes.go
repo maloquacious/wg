@@ -15,11 +15,17 @@ type BiomesOptions struct {
 	Scale float64
 	// Borders draws the outline of every cell.
 	Borders bool
+	// Icons draws a hand-drawn Red Blob Games icon in each cell, as
+	// mapgen2 does: waves, mountains, trees, grass and so on. Credit Red
+	// Blob Games wherever the icons appear.
+	Icons bool
+	// Seed chooses among the drawings of each icon.
+	Seed uint64
 }
 
 // DefaultBiomesOptions returns the options used by the tests.
 func DefaultBiomesOptions() BiomesOptions {
-	return BiomesOptions{Scale: DefaultRiversOptions().Scale}
+	return BiomesOptions{Scale: DefaultRiversOptions().Scale, Seed: 0x0123456789abcdef}
 }
 
 // BiomeColor returns the color of b: mapgen2's, or ours for the biomes
@@ -33,7 +39,8 @@ func BiomeColor(b biomes.Biome) color.RGBA {
 
 // Biomes renders every cell in the mapgen2 color of its biome, outlines the
 // coast and the lake shores in mapgen2's COAST and LAKESHORE colors, and
-// draws the rivers on top.
+// draws the rivers on top. With opts.Icons, it draws the icons over all of
+// that.
 func Biomes(b *biomes.Map, opts BiomesOptions) *image.RGBA {
 	t := b.Moisture.Rivers.Terrain
 	mesh := t.Mesh
@@ -75,5 +82,8 @@ func Biomes(b *biomes.Map, opts BiomesOptions) *image.RGBA {
 		}
 	}
 	drawRivers(img, b.Moisture.Rivers, opts.Scale)
+	if opts.Icons {
+		drawIcons(img, b, opts.Seed)
+	}
 	return img
 }

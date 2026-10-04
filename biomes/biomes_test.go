@@ -294,9 +294,17 @@ func TestRender(t *testing.T) {
 		t.Skip("set -render to write the biome images")
 	}
 	b := generate(t)
-	for name, borders := range map[string]bool{"biomes.png": false, "biomes-mesh.png": true} {
+	for _, tc := range []struct {
+		name           string
+		borders, icons bool
+	}{
+		{"biomes.png", false, false},
+		{"biomes-mesh.png", true, false},
+		{"biomes-icons.png", false, true},
+	} {
 		opts := render.DefaultBiomesOptions()
-		opts.Borders = borders
+		opts.Borders, opts.Icons = tc.borders, tc.icons
+		name := tc.name
 		path := filepath.Join(*renderDir, name)
 		if err := render.WritePNG(path, render.Biomes(b, opts)); err != nil {
 			t.Fatal(err)
@@ -309,5 +317,26 @@ func TestGenerateIsDeterministic(t *testing.T) {
 	a, b := generate(t), generate(t)
 	if !slices.Equal(a.Cells, b.Cells) || !slices.Equal(a.Altitude, b.Altitude) {
 		t.Fatal("biomes differ between runs")
+	}
+}
+
+// TestRenderIcons checks that icons change the image, that the same seed
+// draws the same icons, and that another seed picks other drawings.
+func TestRenderIcons(t *testing.T) {
+	b := generate(t)
+	opts := render.DefaultBiomesOptions()
+	plain := render.Biomes(b, opts)
+	opts.Icons = true
+	a, again := render.Biomes(b, opts), render.Biomes(b, opts)
+	opts.Seed++
+	other := render.Biomes(b, opts)
+	if slices.Equal(plain.Pix, a.Pix) {
+		t.Error("icons drew nothing")
+	}
+	if !slices.Equal(a.Pix, again.Pix) {
+		t.Error("the same seed drew different icons")
+	}
+	if slices.Equal(a.Pix, other.Pix) {
+		t.Error("another seed drew the same icons")
 	}
 }
